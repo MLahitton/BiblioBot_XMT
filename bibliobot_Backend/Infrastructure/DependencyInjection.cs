@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Infrastructure.Persistence;
 using Infrastructure.Persistence.SeedData;
+using Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +26,12 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<BiblioBotDbContext>());
         services.AddScoped<IDatabaseSeeder, BiblioBotDatabaseSeeder>();
+        services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
+        services.AddHttpContextAccessor();
+        services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddScoped<IPasswordHasher, PasswordHasher>();
+        services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
 
         return services;
     }
