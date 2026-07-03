@@ -7,9 +7,13 @@ type BookGridProps = {
 
 export function BookGrid({ books }: BookGridProps) {
   return (
-    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
       {books.map((book, index) => (
-        <BookCard key={book.id} book={book} revealDelay={index * 0.06} />
+        <BookCard
+          key={book.id}
+          book={book}
+          revealDelay={index * 0.06}
+        />
       ))}
     </div>
   );

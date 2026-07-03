@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 
+const bodyFont = Manrope({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-body",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Webook | Ecommerce moderno de libros",
+  title: "Webook | Librería digital premium",
   description:
-    "Descubre libros, categorías curadas y recomendaciones editoriales en Webook.",
+    "Descubre libros, colecciones curadas y recomendaciones editoriales en Webook.",
 };
 
 export default function RootLayout({
@@ -14,7 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body className={bodyFont.variable}>{children}</body>
     </html>
   );
 }

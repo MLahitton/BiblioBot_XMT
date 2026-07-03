@@ -10,9 +10,11 @@ export async function HomePage() {
   ]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <div className="page-shell min-h-screen w-full bg-background text-foreground">
       <Header />
-      <ParallaxBookExperience books={featuredBooks} categories={categories} />
+      <div className="pt-20">
+        <ParallaxBookExperience books={featuredBooks} categories={categories} />
+      </div>
     </div>
   );
 }

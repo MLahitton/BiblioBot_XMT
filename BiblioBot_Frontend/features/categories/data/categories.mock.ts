@@ -52,7 +52,7 @@ export const categoriesMock: Category[] = [
   {
     id: "history",
     name: "Historia",
-    description: "Relatos, epocas y conexiones culturales.",
+    description: "Relatos, épocas y conexiones culturales.",
     icon: "/icons/category.svg",
     slug: "historia",
     totalBooks: 69,

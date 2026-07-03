@@ -3,7 +3,7 @@ import { routes } from "@/constants/routes";
 export const siteConfig = {
   name: "Webook",
   description:
-    "Ecommerce moderno de libros con recomendaciones, colecciones curadas y una experiencia visual inmersiva.",
+    "Ecommerce minimalista de libros con recomendaciones, colecciones curadas e imágenes realistas.",
   url: "https://webook.example.com",
   keywords: [
     "libros",
@@ -14,7 +14,7 @@ export const siteConfig = {
     "autores",
     "Webook",
   ],
-  author: "Webook Team",
+  author: "Equipo Webook",
   navItems: [
     {
       label: "Inicio",

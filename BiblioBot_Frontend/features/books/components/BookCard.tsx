@@ -12,59 +12,56 @@ type BookCardProps = {
 
 export function BookCard({ book, revealDelay = 0 }: BookCardProps) {
   const shouldReduceMotion = useReducedMotion();
-  const stockLabel = book.stock > 0 ? `${book.stock} disponibles` : "Preventa";
 
   return (
     <motion.article
-      className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card p-4 shadow-2xl shadow-black/20 backdrop-blur-xl transition-colors duration-300 hover:border-accent/50 hover:bg-white/[0.1]"
-      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 26, scale: 0.98 }}
-      whileInView={
-        shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }
-      }
-      whileHover={shouldReduceMotion ? undefined : { y: -6 }}
-      transition={{ delay: revealDelay, duration: 0.66, ease: [0.22, 1, 0.36, 1] }}
-      viewport={{ once: true, amount: 0.22, margin: "0px 0px -8% 0px" }}
+      className="group"
+      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 18 }}
+      whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      transition={{ delay: revealDelay, duration: 0.42, ease: "easeOut" }}
+      viewport={{ once: true, amount: 0.24 }}
     >
-      <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-card-solid">
+      <div className="relative aspect-[1.08] overflow-hidden rounded-xl bg-card shadow-[inset_0_1px_0_rgba(255,255,255,0.48),0_12px_28px_var(--shadow-soft)]">
         <Image
           src={book.image}
-          alt={`Portada de ${book.title}`}
+          alt={`Imagen realista de ${book.title}`}
           fill
-          className="object-cover transition duration-500 group-hover:scale-105"
-          sizes="(max-width: 768px) 70vw, 220px"
+          className="object-cover transition duration-500 group-hover:scale-[1.035]"
+          sizes="(max-width: 768px) 80vw, (max-width: 1180px) 28vw, 280px"
         />
-        {book.badge ? (
-          <span className="absolute left-3 top-3 rounded-full border border-border bg-background/[0.82] px-3 py-1 text-xs font-medium text-accent-soft backdrop-blur">
-            {book.badge}
-          </span>
-        ) : null}
+        <span className="absolute right-3 top-3 rounded-full border border-border bg-paper px-3 py-1 text-[0.68rem] font-extrabold text-foreground shadow-sm">
+          {book.category}
+        </span>
       </div>
-      <div className="mt-4 flex flex-1 flex-col space-y-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.16em] text-accent">
-            {book.category}
-          </p>
-          <h3 className="mt-1 text-lg font-semibold leading-tight text-foreground">
-            {book.title}
-          </h3>
-          <p className="text-sm text-muted">{book.author}</p>
-        </div>
-        <p className="line-clamp-2 text-sm leading-6 text-muted">
-          {book.description}
-        </p>
-        <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="mt-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-extrabold leading-tight text-foreground">
+              {book.title}
+            </h3>
+            <p className="mt-1 text-xs font-semibold text-muted">
+              {book.author}
+            </p>
+          </div>
           <BookPrice price={book.price} previousPrice={book.previousPrice} />
-          <span className="rounded-full bg-accent/10 px-2.5 py-1 text-sm font-medium text-accent-soft">
-            {book.rating.toFixed(1)}
-          </span>
         </div>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted">{stockLabel}</p>
+        <div className="mt-2 flex items-center gap-1 text-xs font-semibold text-muted">
+          <span className="text-amber-500">&#9733;</span>
+          <span>{book.rating.toFixed(1)}</span>
+          <span>({book.stock > 0 ? book.stock : 1} reseñas)</span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             type="button"
-            className="rounded-full border border-border px-3 py-2 text-xs font-semibold text-foreground transition hover:border-accent/60 hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="h-9 rounded-full border border-border bg-paper px-3 text-xs font-extrabold text-foreground transition hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            Ver detalle
+            Agregar
+          </button>
+          <button
+            type="button"
+            className="h-9 rounded-full bg-foreground px-3 text-xs font-extrabold text-paper shadow-[0_10px_22px_rgba(53,30,28,0.16)] transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Comprar
           </button>
         </div>
       </div>
