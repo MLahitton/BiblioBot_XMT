@@ -1,6 +1,7 @@
 import { Header } from "@/components/layout/Header";
 import { getFeaturedBooks } from "@/features/books/services/books.service";
 import { getCategories } from "@/features/categories/services/categories.service";
+import { BiblioBotChatWidget } from "./BiblioBotChatWidget";
 import { ParallaxBookExperience } from "./ParallaxBookExperience";
 
 export async function HomePage() {
@@ -15,6 +16,7 @@ export async function HomePage() {
       <div className="pt-20">
         <ParallaxBookExperience books={featuredBooks} categories={categories} />
       </div>
+      <BiblioBotChatWidget />
     </div>
   );
 }

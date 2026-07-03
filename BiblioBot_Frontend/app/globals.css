@@ -95,7 +95,7 @@ img {
 }
 
 /* ═══════════════════════════════════════════════════
-   HERO WORDMARK  — 3-layer letterpress extrusion
+   HERO WORDMARK — soft layered letterpress
    ═══════════════════════════════════════════════════ */
 
 .hero-wordmark-stage {
@@ -106,15 +106,15 @@ img {
 /* Ambient colour bloom — large soft halo behind the glyphs */
 .hero-wordmark-stage::before {
   position: absolute;
-  inset: 5% -8% -28%;
+  inset: 2% -7% -22%;
   z-index: -10;
   content: "";
   pointer-events: none;
   background:
-    radial-gradient(ellipse 46% 72% at 12% 56%, rgba(160, 201, 203, 0.92), transparent),
-    radial-gradient(ellipse 56% 86% at 50% 62%, rgba(255, 96, 55, 0.75), transparent),
-    radial-gradient(ellipse 50% 76% at 88% 54%, rgba(115, 54, 53, 0.88), transparent);
-  filter: blur(60px);
+    radial-gradient(ellipse 42% 68% at 12% 56%, rgba(160, 201, 203, 0.5), transparent),
+    radial-gradient(ellipse 54% 78% at 50% 62%, rgba(255, 96, 55, 0.4), transparent),
+    radial-gradient(ellipse 48% 72% at 88% 54%, rgba(115, 54, 53, 0.48), transparent);
+  filter: blur(54px);
   animation: wordmark-bloom 14s ease-in-out infinite alternate;
 }
 
@@ -126,39 +126,36 @@ img {
   display: block;
   color: transparent;
 
-  /* 9-stop cinematic gradient */
   background-image: linear-gradient(
     108deg,
-    #0c0403 0%,
-    var(--black-kite) 6%,
-    var(--garnet) 17%,
-    #c94420 27%,
-    var(--toxic-orange) 36%,
-    #ff9372 43%,
-    #fff6f0 50%,
-    #ceeef0 56%,
-    var(--aqua-mist) 62%,
-    #4a8890 72%,
-    var(--garnet) 83%,
-    var(--black-kite) 93%,
-    #0c0403 100%
+    #2b1715 0%,
+    var(--black-kite) 9%,
+    #67322f 22%,
+    #a24c45 35%,
+    #d26957 45%,
+    #f4d4c8 52%,
+    #d7eced 60%,
+    var(--aqua-mist) 68%,
+    #8c4945 82%,
+    #3b201e 100%
   );
-  background-size: 320% 100%;
+  background-size: 260% 100%;
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-font-smoothing: antialiased;
   -webkit-text-fill-color: transparent;
-  -webkit-text-stroke: 0.3px rgba(255, 255, 255, 0.08);
+  -webkit-text-stroke: 0.25px rgba(255, 255, 255, 0.1);
 
   transform: translateZ(0);
 
-  /* Warm ambient glow around the text */
-  filter: drop-shadow(0 0 28px rgba(255, 96, 55, 0.15));
+  filter:
+    drop-shadow(0 10px 18px rgba(53, 30, 28, 0.14))
+    drop-shadow(0 0 22px rgba(255, 96, 55, 0.1));
 
   animation: wordmark-gradient 20s ease-in-out infinite alternate;
 }
 
-/* ── 3D Extrusion block (Behind the text) ── */
+/* ── Soft 3D extrusion block (behind the text) ── */
 .hero-wordmark::before {
   position: absolute;
   inset: 0;
@@ -166,22 +163,16 @@ img {
   pointer-events: none;
   user-select: none;
   z-index: -1;
-  
-  /* Text fill must be transparent so it doesn't block anything */
   color: transparent;
-  
-  /* Solid 3D extrusion generated via stacked shadows */
   text-shadow: 
-    0.01em 0.015em 0 #8e4240,
-    0.02em 0.03em 0 #733635,
-    0.03em 0.045em 0 #5a2420,
-    0.04em 0.06em 0 #3a1210,
-    0.05em 0.075em 0 #1e0b07,
-    0.06em 0.09em 0 #0c0202,
-    0.06em 0.12em 24px rgba(0, 0, 0, 0.6);
+    0.008em 0.012em 0 rgba(142, 66, 64, 0.72),
+    0.016em 0.024em 0 rgba(115, 54, 53, 0.58),
+    0.024em 0.036em 0 rgba(90, 36, 32, 0.46),
+    0.032em 0.048em 0 rgba(53, 30, 28, 0.34),
+    0.042em 0.064em 18px rgba(53, 30, 28, 0.3);
 }
 
-/* ── Rim light & Chromatic aberration (On top of the text) ── */
+/* ── Soft rim light (on top of the text) ── */
 .hero-wordmark::after {
   position: absolute;
   inset: 0;
@@ -191,29 +182,27 @@ img {
   z-index: 2;
 
   background-image: 
-    /* Upper-left bright rim light */
     linear-gradient(
       136deg,
-      rgba(255, 252, 246, 0.75) 0%,
-      rgba(255, 248, 238, 0.4) 12%,
-      rgba(255, 244, 230, 0.15) 24%,
+      rgba(255, 252, 246, 0.46) 0%,
+      rgba(255, 248, 238, 0.25) 13%,
+      rgba(255, 244, 230, 0.1) 25%,
       transparent 40%
     ),
-    /* Teal / Amber chromatic fringe */
     linear-gradient(
       108deg,
-      rgba(160, 201, 203, 0.6) 0%,
-      rgba(196, 221, 222, 0.4) 20%,
+      rgba(160, 201, 203, 0.34) 0%,
+      rgba(196, 221, 222, 0.22) 20%,
       transparent 45%,
-      rgba(255, 120, 80, 0.25) 80%,
+      rgba(255, 120, 80, 0.14) 80%,
       transparent 100%
     );
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 
-  /* Negative offset → highlight appears on the top-left edge of every glyph */
-  transform: translate(-0.015em, -0.018em);
+  opacity: 0.88;
+  transform: translate(-0.008em, -0.01em);
 }
 
 /* ── Gloss sheen sweep ─────────────────────── */
@@ -230,11 +219,11 @@ img {
   background: linear-gradient(
     108deg,
     transparent 0%,
-    transparent 20%,
-    rgba(255, 253, 250, 0.5) 34%,
-    rgba(255, 255, 255, 0.24) 42%,
-    rgba(255, 251, 248, 0.44) 50%,
-    transparent 62%,
+    transparent 24%,
+    rgba(255, 253, 250, 0.26) 36%,
+    rgba(255, 255, 255, 0.14) 44%,
+    rgba(255, 251, 248, 0.24) 52%,
+    transparent 64%,
     transparent 100%
   );
   background-size: 280% 100%;
@@ -243,7 +232,7 @@ img {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 
-  animation: wordmark-sheen 12s ease-in-out 1.2s infinite;
+  animation: wordmark-sheen 15s ease-in-out 1.6s infinite;
 }
 
 /* ══════════════════════════════════════════════
@@ -266,19 +255,19 @@ img {
 
 @keyframes wordmark-bloom {
   0% {
-    opacity: 0.44;
-    transform: translate3d(-2.5%, 2.5%, 0) scale(0.93);
-    filter: blur(58px);
+    opacity: 0.28;
+    transform: translate3d(-2%, 2%, 0) scale(0.96);
+    filter: blur(52px);
   }
 
   50% {
-    opacity: 0.86;
+    opacity: 0.56;
   }
 
   100% {
-    opacity: 1;
-    transform: translate3d(2.5%, -2%, 0) scale(1.1);
-    filter: blur(66px);
+    opacity: 0.68;
+    transform: translate3d(2%, -1.5%, 0) scale(1.06);
+    filter: blur(58px);
   }
 }
 
