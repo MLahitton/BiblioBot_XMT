@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BiblioBot Frontend",
-  description: "Frontend application for BiblioBot.",
+  title: "Webook | Ecommerce moderno de libros",
+  description:
+    "Descubre libros, categorías curadas y recomendaciones editoriales en Webook.",
 };
 
 export default function RootLayout({

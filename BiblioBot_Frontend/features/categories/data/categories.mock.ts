@@ -1,0 +1,68 @@
+import type { Category } from "../types/category.types";
+
+export const categoriesMock: Category[] = [
+  {
+    id: "fiction",
+    name: "Ficción",
+    description: "Historias contemporáneas, íntimas y memorables.",
+    icon: "/icons/book.svg",
+    slug: "ficcion",
+    totalBooks: 128,
+  },
+  {
+    id: "business",
+    name: "Negocios",
+    description: "Estrategia, liderazgo y pensamiento comercial.",
+    icon: "/icons/category.svg",
+    slug: "negocios",
+    totalBooks: 86,
+  },
+  {
+    id: "technology",
+    name: "Tecnología",
+    description: "Producto digital, datos, sistemas y futuro.",
+    icon: "/icons/search.svg",
+    slug: "tecnologia",
+    totalBooks: 74,
+  },
+  {
+    id: "science",
+    name: "Ciencia",
+    description: "Ideas claras para entender mejor el mundo.",
+    icon: "/icons/star.svg",
+    slug: "ciencia",
+    totalBooks: 63,
+  },
+  {
+    id: "fantasy",
+    name: "Fantasía",
+    description: "Mundos imaginarios con atmósferas envolventes.",
+    icon: "/icons/book.svg",
+    slug: "fantasia",
+    totalBooks: 91,
+  },
+  {
+    id: "personal-growth",
+    name: "Desarrollo personal",
+    description: "Hábitos, foco y crecimiento sostenible.",
+    icon: "/icons/star.svg",
+    slug: "desarrollo-personal",
+    totalBooks: 58,
+  },
+  {
+    id: "history",
+    name: "Historia",
+    description: "Relatos, epocas y conexiones culturales.",
+    icon: "/icons/category.svg",
+    slug: "historia",
+    totalBooks: 69,
+  },
+  {
+    id: "art",
+    name: "Arte",
+    description: "Color, composición, fotografía y mirada visual.",
+    icon: "/icons/cart.svg",
+    slug: "arte",
+    totalBooks: 42,
+  },
+];

@@ -1,7 +1,5 @@
-export default function HomePage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-3xl font-bold">BiblioBot Frontend</h1>
-    </main>
-  );
+import { HomePage } from "@/features/home/components/HomePage";
+
+export default function Page() {
+  return <HomePage />;
 }
