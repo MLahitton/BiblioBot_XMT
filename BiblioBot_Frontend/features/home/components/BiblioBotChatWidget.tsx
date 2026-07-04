@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { useChatContext } from "./ChatContext";
 
 type ChatMessage = {
   id: number;
@@ -43,12 +44,7 @@ function getBotReply(message: string): string {
 
 function CloseIcon() {
   return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
       <path
         d="M6.75 6.75l10.5 10.5M17.25 6.75l-10.5 10.5"
         stroke="currentColor"
@@ -62,12 +58,7 @@ function CloseIcon() {
 function ExpandIcon({ isExpanded }: { isExpanded: boolean }) {
   if (isExpanded) {
     return (
-      <svg
-        aria-hidden="true"
-        className="h-4 w-4"
-        fill="none"
-        viewBox="0 0 24 24"
-      >
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
         <path
           d="M9.5 4.75v4.75H4.75M14.5 19.25V14.5h4.75M4.75 9.5l4.75-4.75M19.25 14.5l-4.75 4.75"
           stroke="currentColor"
@@ -80,12 +71,7 @@ function ExpandIcon({ isExpanded }: { isExpanded: boolean }) {
   }
 
   return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
       <path
         d="M8.5 4.75H4.75V8.5M15.5 4.75h3.75V8.5M4.75 15.5v3.75H8.5M19.25 15.5v3.75H15.5"
         stroke="currentColor"
@@ -103,6 +89,11 @@ export function BiblioBotChatWidget() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const { setIsChatExpanded } = useChatContext();
+
+  useEffect(() => {
+    setIsChatExpanded(isOpen && isExpanded);
+  }, [isOpen, isExpanded, setIsChatExpanded]);
 
   useEffect(() => {
     if (isOpen) {
@@ -117,7 +108,6 @@ export function BiblioBotChatWidget() {
         setIsExpanded(false);
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
@@ -129,23 +119,11 @@ export function BiblioBotChatWidget() {
 
   const sendMessage = (text: string) => {
     const trimmed = text.trim();
-
-    if (!trimmed) {
-      return;
-    }
-
+    if (!trimmed) return;
     setMessages((currentMessages) => [
       ...currentMessages,
-      {
-        id: currentMessages.length + 1,
-        author: "user",
-        text: trimmed,
-      },
-      {
-        id: currentMessages.length + 2,
-        author: "bot",
-        text: getBotReply(trimmed),
-      },
+      { id: currentMessages.length + 1, author: "user", text: trimmed },
+      { id: currentMessages.length + 2, author: "bot", text: getBotReply(trimmed) },
     ]);
     setInput("");
   };
@@ -156,15 +134,11 @@ export function BiblioBotChatWidget() {
   };
 
   const panelClassName = isExpanded
-    ? `fixed inset-y-0 right-0 flex h-dvh w-full origin-right flex-col overflow-hidden rounded-none border-l border-border bg-paper shadow-[0_28px_80px_rgba(53,30,28,0.24)] transition duration-300 sm:w-[420px] sm:rounded-l-[28px] ${
-        isOpen
-          ? "pointer-events-auto translate-x-0 opacity-100"
-          : "pointer-events-none translate-x-6 opacity-0"
+    ? `fixed inset-y-0 right-0 z-[110] flex h-dvh w-full origin-right flex-col overflow-hidden border-l border-border bg-paper shadow-[-8px_0_40px_rgba(53,30,28,0.14)] transition-[transform,opacity] duration-300 sm:w-[420px] ${
+        isOpen ? "pointer-events-auto translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0"
       }`
     : `absolute bottom-[5.25rem] right-5 flex max-h-[calc(100dvh-7rem)] w-[calc(100vw-2.5rem)] max-w-sm origin-bottom-right flex-col overflow-hidden rounded-[26px] border border-border bg-paper/98 shadow-[0_28px_70px_rgba(53,30,28,0.18)] backdrop-blur-md transition duration-300 sm:bottom-[6.75rem] sm:right-7 sm:w-[360px] ${
-        isOpen
-          ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
-          : "pointer-events-none translate-y-4 scale-95 opacity-0"
+        isOpen ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-4 scale-95 opacity-0"
       }`;
 
   const messagesClassName = isExpanded
@@ -173,21 +147,15 @@ export function BiblioBotChatWidget() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[120]">
-      {isOpen && isExpanded ? (
-        <button
-          type="button"
-          aria-label="Cerrar BiblioBot"
-          className="pointer-events-auto fixed inset-0 bg-foreground/10 backdrop-blur-[2px] transition"
-          onClick={closeChat}
-        />
-      ) : null}
-
       <div id="bibliobot-chat" className={panelClassName}>
         {!isExpanded ? (
           <div className="absolute -bottom-2 right-8 h-5 w-5 rotate-45 border-b border-r border-border bg-paper" />
         ) : null}
 
         <div className="relative flex items-center justify-between gap-3 border-b border-border/80 px-4 py-3 sm:px-5">
+          {isExpanded && (
+            <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent via-[#a0c9cb] to-accent opacity-70" />
+          )}
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-inner">
               <Image
@@ -201,14 +169,10 @@ export function BiblioBotChatWidget() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-black text-foreground">
-                  BiblioBot
-                </p>
+                <p className="truncate text-sm font-black text-foreground">BiblioBot</p>
                 <span className="h-2 w-2 rounded-full bg-accent" />
               </div>
-              <p className="truncate text-xs font-semibold text-muted">
-                En linea
-              </p>
+              <p className="truncate text-xs font-semibold text-muted">En linea</p>
             </div>
           </div>
 
@@ -221,7 +185,7 @@ export function BiblioBotChatWidget() {
                   : "border-border bg-card hover:border-accent/50 hover:bg-paper"
               }`}
               aria-label={isExpanded ? "Restaurar chat" : "Expandir chat"}
-              onClick={() => setIsExpanded((currentValue) => !currentValue)}
+              onClick={() => setIsExpanded((v) => !v)}
             >
               <ExpandIcon isExpanded={isExpanded} />
             </button>
@@ -239,11 +203,7 @@ export function BiblioBotChatWidget() {
         <div className={messagesClassName}>
           {messages.map((message) => (
             <div key={message.id}>
-              <div
-                className={`flex ${
-                  message.author === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
+              <div className={`flex ${message.author === "user" ? "justify-end" : "justify-start"}`}>
                 <p
                   className={`max-w-[82%] px-4 py-3 text-sm font-semibold leading-5 ${
                     message.author === "user"
@@ -254,7 +214,6 @@ export function BiblioBotChatWidget() {
                   {message.text}
                 </p>
               </div>
-
               {message.id === 1 ? (
                 <div className="mt-3 flex flex-wrap gap-2 pl-2">
                   {quickPrompts.map((prompt) => (
@@ -300,14 +259,12 @@ export function BiblioBotChatWidget() {
       <button
         type="button"
         className={`pointer-events-auto absolute bottom-5 right-5 flex h-16 w-16 items-center justify-center rounded-[24px] border border-border bg-paper shadow-[0_18px_38px_rgba(53,30,28,0.2),0_0_0_6px_rgba(255,96,55,0.08)] transition hover:-translate-y-1 hover:border-accent/40 hover:shadow-[0_22px_44px_rgba(53,30,28,0.24),0_0_0_7px_rgba(160,201,203,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:bottom-7 sm:right-7 sm:h-20 sm:w-20 sm:rounded-[28px] ${
-          isExpanded && isOpen
-            ? "pointer-events-none translate-x-4 opacity-0"
-            : "opacity-100"
+          isExpanded && isOpen ? "pointer-events-none translate-x-4 opacity-0" : "opacity-100"
         }`}
         aria-label={isOpen ? "Cerrar BiblioBot" : "Abrir BiblioBot"}
         aria-controls="bibliobot-chat"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onClick={() => setIsOpen((v) => !v)}
       >
         <span className="absolute -bottom-1 right-3 h-4 w-4 rotate-45 border-b border-r border-border bg-paper" />
         <Image

@@ -58,15 +58,20 @@ export function Header() {
               0
             </span>
           </button>
-          <button
-            type="button"
-            className="hidden h-9 w-9 overflow-hidden rounded-full border border-border bg-card sm:block"
-            aria-label="Cuenta"
-          >
-            <span className="flex h-full w-full items-center justify-center text-xs font-extrabold">
-              W
-            </span>
-          </button>
+          <div className="hidden items-center gap-2 sm:flex border-l border-border/60 pl-3 ml-1">
+            <Link
+              href="/auth/login"
+              className="rounded-full px-3 py-1.5 text-xs font-bold text-foreground transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/auth/register"
+              className="rounded-full bg-foreground px-4 py-1.5 text-xs font-bold text-paper transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Crear cuenta
+            </Link>
+          </div>
         </div>
       </div>
     </header>

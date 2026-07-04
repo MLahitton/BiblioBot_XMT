@@ -1,8 +1,17 @@
 <svg width="320" height="460" viewBox="0 0 320 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="g" x1="28" y1="20" x2="300" y2="432"><stop stop-color="#F4E8D3"/><stop offset="0.5" stop-color="#C66B4D"/><stop offset="1" stop-color="#1A1613"/></linearGradient></defs>
-  <rect width="320" height="460" rx="18" fill="url(#g)"/>
-  <rect x="58" y="78" width="204" height="204" rx="28" fill="#14110F" opacity="0.16"/>
-  <circle cx="120" cy="154" r="38" fill="#FFF8EC" opacity="0.66"/>
-  <rect x="150" y="122" width="76" height="116" rx="18" fill="#D7A74F" opacity="0.68"/>
-  <path d="M78 344H242M104 374H216" stroke="#FFF8EC" stroke-width="6" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="cover" x1="28" y1="20" x2="300" y2="432">
+      <stop stop-color="#ECECDC"/>
+      <stop offset="0.46" stop-color="#A0C9CB"/>
+      <stop offset="1" stop-color="#351E1C"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="460" rx="18" fill="url(#cover)"/>
+  <rect x="58" y="164" width="204" height="154" rx="28" fill="#351E1C" opacity="0.16"/>
+  <circle cx="120" cy="226" r="38" fill="#F5F4ED" opacity="0.74"/>
+  <rect x="150" y="194" width="76" height="88" rx="18" fill="#FF6037" opacity="0.74"/>
+  <path d="M78 340H242M104 368H216" stroke="#F5F4ED" stroke-width="7" stroke-linecap="round"/>
+  <text x="56" y="86" fill="#351E1C" font-family="Arial, sans-serif" font-size="31" font-weight="800">GALERIA</text>
+  <text x="56" y="122" fill="#351E1C" font-family="Arial, sans-serif" font-size="31" font-weight="800">INTERIOR</text>
+  <text x="56" y="404" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="15" font-weight="700">ISABEL CRANE</text>
 </svg>

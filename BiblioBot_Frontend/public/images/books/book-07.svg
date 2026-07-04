@@ -1,7 +1,15 @@
 <svg width="320" height="460" viewBox="0 0 320 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="g" x1="0" y1="460" x2="320" y2="0"><stop stop-color="#211B16"/><stop offset="0.5" stop-color="#8A694B"/><stop offset="1" stop-color="#F4E8D3"/></linearGradient></defs>
-  <rect width="320" height="460" rx="18" fill="url(#g)"/>
-  <path d="M54 104C106 78 150 124 206 96C232 83 254 84 276 92V334C244 320 214 320 182 336C132 360 96 316 54 342V104Z" fill="#FFF8EC" opacity="0.22"/>
-  <path d="M82 144C124 128 148 164 190 146C212 137 232 136 254 142M82 198C124 182 148 218 190 200C212 191 232 190 254 196M82 252C124 236 148 272 190 254C212 245 232 244 254 250" stroke="#FFF8EC" stroke-opacity="0.42" stroke-width="4" stroke-linecap="round"/>
-  <path d="M74 382H246" stroke="#FFF8EC" stroke-width="6" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="cover" x1="0" y1="460" x2="320" y2="0">
+      <stop stop-color="#351E1C"/>
+      <stop offset="0.5" stop-color="#733635"/>
+      <stop offset="1" stop-color="#ECECDC"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="460" rx="18" fill="url(#cover)"/>
+  <path d="M54 150C106 124 150 170 206 142C232 129 254 130 276 138V334C244 320 214 320 182 336C132 360 96 316 54 342V150Z" fill="#F5F4ED" opacity="0.24"/>
+  <path d="M82 184C124 168 148 204 190 186C212 177 232 176 254 182M82 238C124 222 148 258 190 240C212 231 232 230 254 236M82 292C124 276 148 312 190 294C212 285 232 284 254 290" stroke="#F5F4ED" stroke-opacity="0.46" stroke-width="4" stroke-linecap="round"/>
+  <text x="56" y="86" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="31" font-weight="800">MAPAS</text>
+  <text x="56" y="122" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="31" font-weight="800">DEL TIEMPO</text>
+  <text x="56" y="404" fill="#F5F4ED" fill-opacity="0.82" font-family="Arial, sans-serif" font-size="15" font-weight="700">JULIAN MESTRE</text>
 </svg>

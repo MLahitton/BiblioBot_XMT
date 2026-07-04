@@ -13,6 +13,12 @@ export const metadata: Metadata = {
   title: "Webook | Librería digital premium",
   description:
     "Descubre libros, colecciones curadas y recomendaciones editoriales en Webook.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "512x512" },
+    ],
+  },
 };
 
 export default function RootLayout({

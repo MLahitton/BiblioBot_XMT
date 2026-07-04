@@ -12,7 +12,7 @@ const priceFormatter = new Intl.NumberFormat(
 
 export function BookPrice({ price, previousPrice }: BookPriceProps) {
   return (
-    <div className="shrink-0 text-right">
+    <div className="shrink-0 text-center">
       <span className="block text-base font-black text-foreground">
         {priceFormatter.format(price)}
       </span>

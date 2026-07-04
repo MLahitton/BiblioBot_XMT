@@ -1,7 +1,16 @@
 <svg width="320" height="460" viewBox="0 0 320 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="320" y2="460"><stop stop-color="#FFF1D0"/><stop offset="1" stop-color="#B77B42"/></linearGradient></defs>
-  <rect width="320" height="460" rx="18" fill="url(#g)"/>
-  <rect x="62" y="78" width="196" height="236" rx="98" fill="#14110F" opacity="0.13"/>
-  <path d="M160 118V276M112 164L160 116L208 164M112 246L160 294L208 246" stroke="#3A271C" stroke-opacity="0.62" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M78 364H242M98 392H222" stroke="#3A271C" stroke-width="6" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="cover" x1="0" y1="0" x2="320" y2="460">
+      <stop stop-color="#F5F4ED"/>
+      <stop offset="0.56" stop-color="#ECECDC"/>
+      <stop offset="1" stop-color="#FF6037"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="460" rx="18" fill="url(#cover)"/>
+  <rect x="58" y="154" width="204" height="148" rx="102" fill="#351E1C" opacity="0.13"/>
+  <path d="M160 140V300M112 186L160 138L208 186M112 270L160 318L208 270" stroke="#351E1C" stroke-opacity="0.62" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="58" y="82" fill="#351E1C" font-family="Arial, sans-serif" font-size="30" font-weight="800">HABITOS</text>
+  <text x="58" y="118" fill="#351E1C" font-family="Arial, sans-serif" font-size="30" font-weight="800">CON NORTE</text>
+  <text x="58" y="396" fill="#733635" font-family="Arial, sans-serif" font-size="15" font-weight="700">CAMILA SOTO</text>
+  <rect x="58" y="414" width="126" height="6" rx="3" fill="#A0C9CB"/>
 </svg>
