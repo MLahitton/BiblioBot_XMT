@@ -69,9 +69,9 @@ public sealed class GetSalesQueryHandler : IRequestHandler<GetSalesQuery, PagedR
             {
                 Id = sale.Id,
                 CustomerId = sale.CustomerId,
-                CustomerName = sale.Customer?.FullName,
+                CustomerName = sale.Customer != null ? sale.Customer.FullName : null,
                 ActorId = sale.ActorId,
-                ActorName = sale.Actor?.FullName,
+                ActorName = sale.Actor != null ? sale.Actor.FullName : null,
                 BranchId = sale.BranchId,
                 BranchName = sale.Branch != null ? sale.Branch.Name : null,
                 StatusCode = sale.Status.Code,
@@ -84,7 +84,7 @@ public sealed class GetSalesQueryHandler : IRequestHandler<GetSalesQuery, PagedR
                 CreatedAt = sale.CreatedAt,
                 ConfirmedAt = sale.ConfirmedAt,
                 IsIdempotent = false,
-                Details = [],
+                Details = Array.Empty<SaleDetailDto>(),
                 Invoice = null,
             })
             .ToListAsync(cancellationToken);

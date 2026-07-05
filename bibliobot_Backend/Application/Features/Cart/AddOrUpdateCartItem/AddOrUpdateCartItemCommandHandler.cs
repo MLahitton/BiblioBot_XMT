@@ -122,7 +122,6 @@ public sealed class AddOrUpdateCartItemCommandHandler : IRequestHandler<
                 BookId = request.BookId,
                 Quantity = request.Quantity,
                 UnitPrice = book.Price,
-                Book = book,
             });
 
             isCreated = true;
@@ -136,7 +135,15 @@ public sealed class AddOrUpdateCartItemCommandHandler : IRequestHandler<
         cart.UpdatedAt = DateTimeOffset.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 
-        var result = BuildCartDto(cart);
+        var persistedCart = await _context.Carts
+            .AsNoTracking()
+            .Include(c => c.CartItems)
+                .ThenInclude(item => item.Book)
+            .FirstAsync(
+                c => c.Id == cart.Id && c.Status == CartStatusCodes.Active,
+                cancellationToken);
+
+        var result = BuildCartDto(persistedCart);
 
         return (result, isCreated);
     }

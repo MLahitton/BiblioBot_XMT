@@ -137,38 +137,36 @@ public sealed class ConfirmSaleCommandHandler : IRequestHandler<ConfirmSaleComma
             throw new KeyNotFoundException("Tipo de movimiento no encontrado.");
         }
 
-        if (_context is Microsoft.EntityFrameworkCore.DbContext dbContext)
-        {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-            try
-            {
-                var invoiceNumber = await GetUniqueInvoiceNumberAsync(
-                    sale.Id,
-                    now,
-                    cancellationToken);
-
-                ApplyConfirmation(sale, now, actorId, saleMovementType, inventoryStocks, saleStatusConfirmed.Id);
-                EnsureInvoice(sale, now, invoiceNumber);
-
-                await _context.SaveChangesAsync(cancellationToken);
-                await dbContext.Database.CommitTransactionAsync(cancellationToken);
-            }
-            catch
-            {
-                await dbContext.Database.RollbackTransactionAsync(cancellationToken);
-                throw;
-            }
-        }
-        else
+        try
         {
             var invoiceNumber = await GetUniqueInvoiceNumberAsync(
                 sale.Id,
                 now,
                 cancellationToken);
 
-            ApplyConfirmation(sale, now, actorId, saleMovementType, inventoryStocks, saleStatusConfirmed.Id);
-            EnsureInvoice(sale, now, invoiceNumber);
-            await _context.SaveChangesAsync(cancellationToken);
+            ApplyConfirmation(
+                sale,
+                now,
+                actorId,
+                saleMovementType,
+                inventoryStocks,
+                saleStatusConfirmed.Id,
+                invoiceNumber,
+                _context);
+
+            await SaveChangesWithHandlingAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new InvalidOperationException(
+                "La venta no pudo confirmarse porque fue actualizada por otro proceso. Intenta nuevamente.",
+                ex);
+        }
+        catch (DbUpdateException ex) when (IsInvoiceUniquenessConflict(ex))
+        {
+            throw new InvalidOperationException(
+                "La venta ya tiene una factura asociada. Vuelve a consultarla para revisar su estado.",
+                ex);
         }
 
         return MapSaleToDto(sale);
@@ -180,8 +178,12 @@ public sealed class ConfirmSaleCommandHandler : IRequestHandler<ConfirmSaleComma
         Guid actorId,
         Domain.Entities.InventoryMovementType saleMovementType,
         List<Domain.Entities.InventoryStock> inventoryStocks,
-        Guid confirmedStatusId)
+        Guid confirmedStatusId,
+        string invoiceNumber,
+        IApplicationDbContext context)
     {
+        var hasInvoice = sale.Invoice is not null;
+
         foreach (var detail in sale.SaleDetails)
         {
             var stock = inventoryStocks.First(stock => stock.BookId == detail.BookId);
@@ -191,7 +193,8 @@ public sealed class ConfirmSaleCommandHandler : IRequestHandler<ConfirmSaleComma
             stock.CurrentStock = newStock;
             stock.UpdatedAt = now;
 
-            sale.InventoryMovements.Add(new InventoryMovement
+            context.InventoryMovements.Add(
+                new InventoryMovement
             {
                 BookId = detail.BookId,
                 BranchId = sale.BranchId!.Value,
@@ -209,27 +212,36 @@ public sealed class ConfirmSaleCommandHandler : IRequestHandler<ConfirmSaleComma
         sale.StatusId = confirmedStatusId;
         sale.ConfirmedAt = now;
         sale.UpdatedAt = now;
+
+        if (!hasInvoice)
+        {
+            context.Invoices.Add(
+                new Invoice
+                {
+                    SaleId = sale.Id,
+                    CustomerId = sale.CustomerId,
+                    InvoiceNumber = invoiceNumber,
+                    Subtotal = sale.Subtotal,
+                    TaxTotal = sale.TaxTotal,
+                    Total = sale.Total,
+                    IssuedAt = now,
+                    IsCancelled = false,
+                });
+        }
     }
 
-    private static void EnsureInvoice(
-        Domain.Entities.Sale sale,
-        DateTimeOffset issuedAt,
-        string invoiceNumber)
+    private async Task SaveChangesWithHandlingAsync(CancellationToken cancellationToken)
     {
-        if (sale.Invoice is null)
-        {
-            sale.Invoice = new Invoice
-            {
-                SaleId = sale.Id,
-                CustomerId = sale.CustomerId,
-                InvoiceNumber = invoiceNumber,
-                Subtotal = sale.Subtotal,
-                TaxTotal = sale.TaxTotal,
-                Total = sale.Total,
-                IssuedAt = issuedAt,
-                IsCancelled = false,
-            };
-        }
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static bool IsInvoiceUniquenessConflict(DbUpdateException exception)
+    {
+        var providerMessage = exception.InnerException?.Message ?? string.Empty;
+        return providerMessage.Contains("23505", StringComparison.OrdinalIgnoreCase)
+            && (
+                providerMessage.Contains("uq_invoices_sale_id", StringComparison.OrdinalIgnoreCase)
+                || providerMessage.Contains("uq_invoices_invoice_number", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string GetInvoiceNumber(Guid saleId, DateTimeOffset issuedAt)
