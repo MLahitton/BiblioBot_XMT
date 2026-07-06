@@ -10,7 +10,7 @@
     "sentAt": "2026-07-06T12:00:00Z"
   },
   "response": {
-    "response": "Puedo ayudarte a buscar libros en el catalogo. Indica titulo, autor, categoria o una palabra clave.",
+    "response": "Encontre estos libros en el catalogo simulado: Arquitectura Limpia para APIs.",
     "state": "INTENT_DETECTED",
     "links": [],
     "uiAction": "NAVIGATE_TO_CATALOG",
@@ -29,7 +29,19 @@
         "source": "DOTNET_BACKEND",
         "roles": ["CLIENT"],
         "permissions": ["books.read", "books.search", "chat.message"],
-        "detectedIntent": "catalog_search"
+        "detectedIntent": "catalog_search",
+        "query": "arquitectura",
+        "resultCount": 1,
+        "books": [
+          {
+            "id": "book-004",
+            "title": "Arquitectura Limpia para APIs",
+            "author": "Diego Salazar",
+            "genre": "software",
+            "price": 81000,
+            "available": true
+          }
+        ]
       }
     }
   }

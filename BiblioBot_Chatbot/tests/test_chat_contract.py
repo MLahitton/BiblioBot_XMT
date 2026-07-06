@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.clients import MockDotNetClient
 from app.main import app
 
 
@@ -148,6 +149,108 @@ def test_catalog_search_handles_accented_recommendation():
     assert body["state"] == "INTENT_DETECTED"
     assert body["context"]["intent"] == "catalog_search"
     assert body["uiAction"] == "NAVIGATE_TO_CATALOG"
+    assert body["context"]["metadata"]["resultCount"] >= 2
+    assert body["context"]["metadata"]["books"]
+
+
+def test_mock_client_search_books_returns_fantasy_books():
+    mock_client = MockDotNetClient()
+
+    books = mock_client.search_books("fantasia")
+
+    assert len(books) >= 2
+    assert all(book["genre"] == "fantasia" for book in books)
+
+
+def test_mock_client_get_book_detail_returns_existing_book():
+    mock_client = MockDotNetClient()
+
+    book = mock_client.get_book_detail("book-001")
+
+    assert book is not None
+    assert book["id"] == "book-001"
+    assert "stockByBranch" in book
+
+
+def test_mock_client_get_book_detail_returns_none_for_missing_book():
+    mock_client = MockDotNetClient()
+
+    book = mock_client.get_book_detail("book-missing")
+
+    assert book is None
+
+
+def test_mock_client_check_stock_returns_branch_stock():
+    mock_client = MockDotNetClient()
+
+    stock = mock_client.check_stock("book-001", "branch-north")
+
+    assert stock is not None
+    assert stock["bookId"] == "book-001"
+    assert stock["branchId"] == "branch-north"
+    assert stock["stock"] == 4
+    assert stock["status"] == "MOCK_ONLY"
+
+
+def test_mock_client_check_stock_handles_missing_branch():
+    mock_client = MockDotNetClient()
+
+    stock = mock_client.check_stock("book-001", "branch-missing")
+
+    assert stock is not None
+    assert stock["branchId"] == "branch-missing"
+    assert stock["stock"] == 0
+    assert stock["available"] is False
+    assert stock["status"] == "MOCK_ONLY"
+
+
+def test_book_detail_detects_existing_book_from_message():
+    payload = build_payload("ver libro Python Practico")
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["uiAction"] == "NAVIGATE_TO_PRODUCT"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["metadata"]["book"]["id"] == "book-003"
+
+
+def test_book_detail_without_book_identifier_asks_for_details():
+    payload = build_payload("ver libro")
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "ASKING_DETAILS"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["nextAction"] == "ASK_BOOK_IDENTIFIER"
+
+
+def test_stock_check_detects_existing_book_from_message():
+    payload = build_payload("stock de Python Practico")
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "stock_check"
+    assert body["context"]["metadata"]["stock"]["bookId"] == "book-003"
+
+
+def test_stock_check_without_book_asks_book_and_branch():
+    payload = build_payload("hay disponibilidad")
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "ASKING_DETAILS"
+    assert body["context"]["intent"] == "stock_check"
+    assert body["context"]["nextAction"] == "ASK_BOOK_AND_BRANCH"
 
 
 def test_purchase_intent_asks_for_book_and_quantity():
@@ -159,6 +262,7 @@ def test_purchase_intent_asks_for_book_and_quantity():
     body = response.json()
     assert body["context"]["intent"] == "purchase_intent"
     assert body["state"] == "ASKING_DETAILS"
+    assert body["state"] != "DONE"
     assert body["context"]["nextAction"] == "ASK_BOOK_AND_QUANTITY"
     assert body["context"]["requiresConfirmation"] is False
 
@@ -193,6 +297,41 @@ def test_inventory_entry_with_permission_asks_details():
     assert body["state"] == "ASKING_DETAILS"
     assert body["context"]["intent"] == "inventory_entry"
     assert body["context"]["nextAction"] == "ASK_INVENTORY_ENTRY_DETAILS"
+    assert body["context"]["requiresConfirmation"] is False
+
+
+def test_transfer_request_with_permission_asks_details_without_mutation():
+    payload = build_payload(
+        "crear traslado",
+        roles=["WORKER"],
+        permissions=["chat.message", "requests.transfer.create"],
+    )
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "ASKING_DETAILS"
+    assert body["context"]["intent"] == "transfer_request"
+    assert body["context"]["nextAction"] == "ASK_TRANSFER_DETAILS"
+    assert body["context"]["requiresConfirmation"] is False
+
+
+def test_purchase_request_with_permission_asks_details_without_mutation():
+    payload = build_payload(
+        "solicitud de compra",
+        roles=["WORKER"],
+        permissions=["chat.message", "requests.purchase.create"],
+    )
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "ASKING_DETAILS"
+    assert body["context"]["intent"] == "purchase_request"
+    assert body["context"]["nextAction"] == "ASK_PURCHASE_REQUEST_DETAILS"
+    assert body["context"]["requiresConfirmation"] is False
 
 
 def test_purchase_request_wins_over_purchase_intent_without_permission():
@@ -218,9 +357,63 @@ def test_invoice_query_wins_over_catalog_terms():
 
     assert response.status_code == 200
     body = response.json()
-    assert body["state"] == "ASKING_DETAILS"
+    assert body["state"] == "INTENT_DETECTED"
     assert body["context"]["intent"] == "invoice_query"
-    assert body["context"]["nextAction"] == "ASK_INVOICE_OR_SALE_ID"
+    assert body["context"]["nextAction"] == "INVOICE_READY"
+    assert body["uiAction"] == "SHOW_INVOICE"
+    assert body["links"][0]["type"] == "invoice"
+    assert body["context"]["metadata"]["invoice"]["id"] == "FAC-0001"
+
+
+def test_sales_query_with_read_all_returns_mock_sales():
+    payload = build_payload(
+        "reporte de ventas",
+        roles=["ADMIN"],
+        permissions=["chat.message", "sales.read_all"],
+    )
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "sales_query"
+    assert body["context"]["metadata"]["scope"] == "all"
+    assert body["context"]["metadata"]["sales"]
+    assert body["context"]["metadata"]["sales"][0]["status"] == "MOCK_ONLY"
+
+
+def test_sales_query_with_read_own_returns_mock_sales():
+    payload = build_payload(
+        "mis ventas",
+        roles=["CLIENT"],
+        permissions=["chat.message", "sales.read_own"],
+    )
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "sales_query"
+    assert body["context"]["metadata"]["scope"] == "own"
+    assert body["context"]["metadata"]["sales"]
+
+
+def test_sales_query_without_read_permissions_fails():
+    payload = build_payload(
+        "reporte de ventas",
+        roles=["WORKER"],
+        permissions=["chat.message"],
+    )
+
+    response = client.post("/chat/process", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "FAILED"
+    assert body["context"]["intent"] == "sales_query"
+    assert body["context"]["nextAction"] == "PERMISSION_DENIED"
 
 
 def test_unknown_intent_needs_clarification():
