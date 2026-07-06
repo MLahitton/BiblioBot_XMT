@@ -1,11 +1,34 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
+from app.agents import GeminiClient
 from app.clients import MockDotNetClient
+from app.api.routes import chat_routes
 from app.main import app
-from app.services import ConfirmationService, PermissionService
+from app.services import ConfirmationService, LlmAssistantService, PermissionService
 
 
 client = TestClient(app)
+
+
+class FakeGeminiClient:
+    def __init__(self, generated_text: str | None = None, available: bool = True):
+        self.generated_text = generated_text
+        self.available = available
+        self.prompts = []
+
+    def is_available(self) -> bool:
+        return self.available
+
+    def generate_text(self, prompt: str) -> str | None:
+        self.prompts.append(prompt)
+        return self.generated_text
+
+
+class RaisingLlm:
+    def invoke(self, messages):
+        raise RuntimeError("simulated Gemini failure")
 
 
 def build_payload(message: str, **overrides):
@@ -87,6 +110,91 @@ def test_confirmation_service_builds_action_ref():
 
     assert action_ref.startswith("mock-action-")
     assert len(action_ref) > len("mock-action-")
+
+
+def test_gemini_client_is_unavailable_without_api_key():
+    gemini_client = GeminiClient(api_key="", model="gemini-2.5-flash")
+
+    assert gemini_client.is_available() is False
+
+
+def test_gemini_client_generate_text_returns_none_without_api_key():
+    gemini_client = GeminiClient(api_key="", model="gemini-2.5-flash")
+
+    assert gemini_client.generate_text("Hola") is None
+
+
+def test_gemini_client_generate_text_returns_none_on_exception():
+    gemini_client = GeminiClient(api_key="fake-api-key", model="gemini-2.5-flash", llm=RaisingLlm())
+
+    assert gemini_client.generate_text("Hola") is None
+
+
+def test_gemini_client_does_not_initialize_llm_on_construction(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Gemini must not initialize on construction")
+
+    monkeypatch.setattr("app.agents.gemini_client.ChatGoogleGenerativeAI", fail_if_called)
+
+    gemini_client = GeminiClient(api_key="fake-api-key", model="gemini-2.5-flash")
+
+    assert gemini_client.is_available() is True
+
+
+def test_llm_assistant_suggest_intent_returns_none_when_unavailable():
+    service = LlmAssistantService(FakeGeminiClient(generated_text="catalog_search", available=False))
+
+    assert service.suggest_intent("buscame libros", ["catalog_search"]) is None
+
+
+def test_llm_assistant_is_available_reflects_gemini_client():
+    service = LlmAssistantService(FakeGeminiClient(generated_text=None, available=True))
+
+    assert service.is_available() is True
+
+
+def test_llm_assistant_suggest_intent_rejects_intent_outside_allowed_list():
+    service = LlmAssistantService(FakeGeminiClient(generated_text="sales_query", available=True))
+
+    assert service.suggest_intent("reporte", ["catalog_search"]) is None
+
+
+def test_llm_assistant_suggest_intent_accepts_allowed_intent():
+    service = LlmAssistantService(FakeGeminiClient(generated_text="catalog_search", available=True))
+
+    assert service.suggest_intent("buscame libros", ["catalog_search"]) == "catalog_search"
+
+
+def test_llm_assistant_improve_response_returns_base_when_unavailable():
+    service = LlmAssistantService(FakeGeminiClient(generated_text="Texto mejorado", available=False))
+
+    assert service.improve_response("Texto base", "hola", "general_help") == "Texto base"
+
+
+def test_llm_assistant_improve_response_rejects_forbidden_promises():
+    service = LlmAssistantService(
+        FakeGeminiClient(generated_text="Ya confirme la venta y llame al backend.", available=True)
+    )
+
+    assert service.improve_response("Texto base seguro", "comprar", "purchase_intent") == "Texto base seguro"
+
+
+def test_llm_assistant_improve_response_accepts_safe_text():
+    service = LlmAssistantService(
+        FakeGeminiClient(generated_text="Claro, puedo ayudarte a revisar opciones del catalogo.", available=True)
+    )
+
+    assert (
+        service.improve_response("Puedo ayudarte con catalogo.", "hola", "general_help")
+        == "Claro, puedo ayudarte a revisar opciones del catalogo."
+    )
+
+
+def test_no_openai_imports_or_usage_in_app_source():
+    app_dir = Path(__file__).resolve().parents[1] / "app"
+    app_source = "\n".join(path.read_text(encoding="utf-8").lower() for path in app_dir.rglob("*.py"))
+
+    assert "openai" not in app_source
 
 
 def test_chat_process_accepts_dotnet_contract():
@@ -564,6 +672,89 @@ def test_unknown_intent_needs_clarification():
     assert body["state"] == "NEEDS_CLARIFICATION"
     assert body["context"]["intent"] == "unknown"
     assert body["context"]["nextAction"] == "ASK_CLARIFICATION"
+
+
+def test_chat_process_works_without_gemini_api_key():
+    original_llm_service = chat_routes.chat_orchestrator.llm_assistant_service
+    chat_routes.chat_orchestrator.llm_assistant_service = LlmAssistantService(
+        FakeGeminiClient(generated_text=None, available=False)
+    )
+    try:
+        payload = build_payload("Hola")
+
+        response = client.post("/chat/process", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["state"] == "IDLE"
+        assert body["context"]["intent"] == "general_help"
+    finally:
+        chat_routes.chat_orchestrator.llm_assistant_service = original_llm_service
+
+
+def test_llm_suggested_purchase_intent_still_requires_permission():
+    original_llm_service = chat_routes.chat_orchestrator.llm_assistant_service
+    chat_routes.chat_orchestrator.llm_assistant_service = LlmAssistantService(
+        FakeGeminiClient(generated_text="purchase_intent", available=True)
+    )
+    try:
+        payload = build_payload("necesito ese ejemplar para mi casa", permissions=["chat.message"])
+
+        response = client.post("/chat/process", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["state"] == "FAILED"
+        assert body["context"]["intent"] == "purchase_intent"
+        assert body["context"]["nextAction"] == "PERMISSION_DENIED"
+    finally:
+        chat_routes.chat_orchestrator.llm_assistant_service = original_llm_service
+
+
+def test_llm_suggested_purchase_intent_still_requires_confirmation():
+    original_llm_service = chat_routes.chat_orchestrator.llm_assistant_service
+    chat_routes.chat_orchestrator.llm_assistant_service = LlmAssistantService(
+        FakeGeminiClient(generated_text="purchase_intent", available=True)
+    )
+    try:
+        payload = build_payload(
+            "necesito ese ejemplar para mi casa",
+            permissions=["chat.message", "cart.manage"],
+        )
+
+        response = client.post("/chat/process", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["state"] == "ASKING_DETAILS"
+        assert body["context"]["intent"] == "purchase_intent"
+        assert body["context"]["requiresConfirmation"] is True
+        assert body["context"]["nextAction"] == "ASK_BOOK_AND_QUANTITY"
+    finally:
+        chat_routes.chat_orchestrator.llm_assistant_service = original_llm_service
+
+
+def test_llm_cannot_make_purchase_mutation_return_done():
+    original_llm_service = chat_routes.chat_orchestrator.llm_assistant_service
+    chat_routes.chat_orchestrator.llm_assistant_service = LlmAssistantService(
+        FakeGeminiClient(generated_text="Texto seguro de apoyo.", available=True)
+    )
+    try:
+        payload = build_payload(
+            "quiero comprar 2 Python Practico",
+            permissions=["chat.message", "cart.manage"],
+        )
+
+        response = client.post("/chat/process", json=payload)
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["state"] == "WAITING_CONFIRMATION"
+        assert body["state"] != "DONE"
+        assert body["context"]["requiresConfirmation"] is True
+        assert body["context"]["nextAction"] == "AWAIT_EXPLICIT_CONFIRMATION"
+    finally:
+        chat_routes.chat_orchestrator.llm_assistant_service = original_llm_service
 
 
 def test_out_of_domain_question_needs_clarification():

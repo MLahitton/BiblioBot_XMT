@@ -11,6 +11,7 @@ from app.schemas.chat_contract import (
     UiActionType,
 )
 from app.services.confirmation_service import ConfirmationService
+from app.services.llm_assistant_service import LlmAssistantService
 from app.services.permission_service import PermissionService
 
 
@@ -20,10 +21,12 @@ class ChatOrchestratorService:
         mock_client: MockDotNetClient | None = None,
         permission_service: PermissionService | None = None,
         confirmation_service: ConfirmationService | None = None,
+        llm_assistant_service: LlmAssistantService | None = None,
     ):
         self.mock_client = mock_client or MockDotNetClient()
         self.permission_service = permission_service or PermissionService()
         self.confirmation_service = confirmation_service or ConfirmationService()
+        self.llm_assistant_service = llm_assistant_service or LlmAssistantService()
 
     def process(self, request: ChatProcessRequest) -> ChatProcessResponse:
         if not request.sessionId.strip():
@@ -72,6 +75,14 @@ class ChatOrchestratorService:
             )
 
         intent = self._detect_intent(request.message)
+        if intent == "unknown":
+            llm_intent = self.llm_assistant_service.suggest_intent(
+                request.message,
+                self._allowed_llm_intents(),
+            )
+            if llm_intent:
+                intent = llm_intent
+
         if not self.permission_service.can_access_intent(intent, request.permissions):
             return self._permission_denied_response(request, intent)
 
@@ -421,8 +432,10 @@ class ChatOrchestratorService:
         if metadata_extra:
             metadata.update(metadata_extra)
 
+        safe_response = self.llm_assistant_service.improve_response(response, request.message, intent)
+
         return ChatProcessResponse(
-            response=response,
+            response=safe_response,
             state=state,
             links=links or [],
             uiAction=ui_action,
@@ -435,6 +448,13 @@ class ChatOrchestratorService:
                 metadata=metadata,
             ),
         )
+
+    def _allowed_llm_intents(self) -> list[str]:
+        return [
+            intent
+            for intent in self.permission_service.INTENT_PERMISSIONS
+            if intent not in {"unknown"}
+        ]
 
     def _permission_denied_response(
         self,
