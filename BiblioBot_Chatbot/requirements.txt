@@ -1,0 +1,9 @@
+fastapi[standard]
+langchain
+langgraph
+langchain-google-genai
+python-dotenv
+pydantic-settings
+uvicorn[standard]>=0.30.0
+httpx
+pytest
