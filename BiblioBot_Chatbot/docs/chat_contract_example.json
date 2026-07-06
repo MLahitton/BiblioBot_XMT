@@ -10,17 +10,17 @@
     "sentAt": "2026-07-06T12:00:00Z"
   },
   "response": {
-    "response": "Contrato recibido desde ASP.NET Core. El procesamiento conversacional real se implementara en la siguiente fase.",
+    "response": "Puedo ayudarte a buscar libros en el catalogo. Indica titulo, autor, categoria o una palabra clave.",
     "state": "INTENT_DETECTED",
     "links": [],
-    "uiAction": "NONE",
+    "uiAction": "NAVIGATE_TO_CATALOG",
     "context": {
-      "intent": "contract_validation",
+      "intent": "catalog_search",
       "requiresConfirmation": false,
       "actionRef": null,
       "invoiceNumber": null,
       "saleOrigin": "CHATBOT",
-      "nextAction": "IMPLEMENT_PHASE_5",
+      "nextAction": "SEARCH_BOOKS_PENDING",
       "selectedBookId": null,
       "saleId": null,
       "selectedBranchId": null,
@@ -28,7 +28,8 @@
         "sessionId": "session-123",
         "source": "DOTNET_BACKEND",
         "roles": ["CLIENT"],
-        "permissions": ["books.read", "books.search", "chat.message"]
+        "permissions": ["books.read", "books.search", "chat.message"],
+        "detectedIntent": "catalog_search"
       }
     }
   }

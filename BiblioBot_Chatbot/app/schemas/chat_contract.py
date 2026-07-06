@@ -27,12 +27,12 @@ class UiActionType(StrEnum):
 
 
 class ChatProcessRequest(BaseModel):
-    sessionId: str = Field(..., min_length=1)
+    sessionId: str = ""
     message: str = Field(..., min_length=1)
     userId: UUID
     userEmail: str | None = None
-    roles: list[str] = Field(default_factory=list)
-    permissions: list[str] = Field(default_factory=list)
+    roles: list[str]
+    permissions: list[str]
     source: str = "DOTNET_BACKEND"
     sentAt: datetime | None = None
 
