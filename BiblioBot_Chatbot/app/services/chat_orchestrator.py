@@ -10,11 +10,20 @@ from app.schemas.chat_contract import (
     ChatState,
     UiActionType,
 )
+from app.services.confirmation_service import ConfirmationService
+from app.services.permission_service import PermissionService
 
 
 class ChatOrchestratorService:
-    def __init__(self, mock_client: MockDotNetClient | None = None):
+    def __init__(
+        self,
+        mock_client: MockDotNetClient | None = None,
+        permission_service: PermissionService | None = None,
+        confirmation_service: ConfirmationService | None = None,
+    ):
         self.mock_client = mock_client or MockDotNetClient()
+        self.permission_service = permission_service or PermissionService()
+        self.confirmation_service = confirmation_service or ConfirmationService()
 
     def process(self, request: ChatProcessRequest) -> ChatProcessResponse:
         if not request.sessionId.strip():
@@ -44,7 +53,28 @@ class ChatOrchestratorService:
                 next_action="REQUEST_VALID_ROLE",
             )
 
+        if self.confirmation_service.is_explicit_cancellation(request.message):
+            return self._build_response(
+                request=request,
+                response="No se ejecuto ninguna accion. Puedes continuar cuando quieras.",
+                state=ChatState.IDLE,
+                intent="cancel_confirmation",
+                next_action="WAITING_USER_MESSAGE",
+            )
+
+        if self.confirmation_service.is_explicit_confirmation(request.message):
+            return self._build_response(
+                request=request,
+                response="No hay una accion pendiente valida para confirmar. Indica primero que necesitas hacer.",
+                state=ChatState.NEEDS_CLARIFICATION,
+                intent="confirmation_without_pending_action",
+                next_action="ASK_ACTION_DETAILS",
+            )
+
         intent = self._detect_intent(request.message)
+        if not self.permission_service.can_access_intent(intent, request.permissions):
+            return self._permission_denied_response(request, intent)
+
         return self._response_for_intent(request, intent)
 
     def _response_for_intent(
@@ -126,13 +156,45 @@ class ChatOrchestratorService:
             )
 
         if intent == "purchase_intent":
+            book = self._find_book_from_message(request.message)
+            quantity = self._extract_quantity(request.message)
+            if book and quantity:
+                summary = f"Preparar compra de {quantity} unidad(es) de {book['title']}"
+                action_ref = self.confirmation_service.build_action_ref(
+                    request.sessionId,
+                    intent,
+                    summary,
+                )
+                pending_action = self.confirmation_service.build_pending_action(
+                    intent=intent,
+                    action_ref=action_ref,
+                    summary=summary,
+                    details={
+                        "bookId": book["id"],
+                        "title": book["title"],
+                        "quantity": quantity,
+                    },
+                )
+                return self._build_response(
+                    request=request,
+                    response=(
+                        f"{summary}. Confirma explicitamente para continuar. "
+                        "En esta fase no se confirma ninguna venta real."
+                    ),
+                    state=ChatState.WAITING_CONFIRMATION,
+                    intent=intent,
+                    next_action="AWAIT_EXPLICIT_CONFIRMATION",
+                    requires_confirmation=True,
+                    action_ref=action_ref,
+                    metadata_extra={"pendingAction": pending_action},
+                )
             return self._build_response(
                 request=request,
-                response="Indica el libro y la cantidad. La compra no se confirmara todavia.",
+                response="Indica el libro y la cantidad. No se hara ninguna compra sin confirmacion explicita.",
                 state=ChatState.ASKING_DETAILS,
                 intent=intent,
                 next_action="ASK_BOOK_AND_QUANTITY",
-                requires_confirmation=False,
+                requires_confirmation=True,
             )
 
         if intent == "invoice_query":
@@ -193,8 +255,14 @@ class ChatOrchestratorService:
                 state=ChatState.ASKING_DETAILS,
                 intent=intent,
                 next_action="ASK_INVENTORY_ENTRY_DETAILS",
-                requires_confirmation=False,
-                metadata_extra={"mockPreparation": "inventory_entry"},
+                requires_confirmation=True,
+                metadata_extra={
+                    "pendingAction": {
+                        "intent": intent,
+                        "status": "AWAITING_REQUIRED_DETAILS",
+                        "mockOnly": True,
+                    }
+                },
             )
 
         if intent == "transfer_request":
@@ -215,8 +283,14 @@ class ChatOrchestratorService:
                 state=ChatState.ASKING_DETAILS,
                 intent=intent,
                 next_action="ASK_TRANSFER_DETAILS",
-                requires_confirmation=False,
-                metadata_extra={"mockPreparation": "transfer_request"},
+                requires_confirmation=True,
+                metadata_extra={
+                    "pendingAction": {
+                        "intent": intent,
+                        "status": "AWAITING_REQUIRED_DETAILS",
+                        "mockOnly": True,
+                    }
+                },
             )
 
         if intent == "purchase_request":
@@ -237,8 +311,14 @@ class ChatOrchestratorService:
                 state=ChatState.ASKING_DETAILS,
                 intent=intent,
                 next_action="ASK_PURCHASE_REQUEST_DETAILS",
-                requires_confirmation=False,
-                metadata_extra={"mockPreparation": "purchase_request"},
+                requires_confirmation=True,
+                metadata_extra={
+                    "pendingAction": {
+                        "intent": intent,
+                        "status": "AWAITING_REQUIRED_DETAILS",
+                        "mockOnly": True,
+                    }
+                },
             )
 
         if intent == "sales_query":
@@ -274,8 +354,8 @@ class ChatOrchestratorService:
             return self._build_response(
                 request=request,
                 response=(
-                    "Puedo ayudarte con catalogo, disponibilidad, compras, facturas "
-                    "y operaciones internas segun tus permisos."
+                    "Puedo ayudarte con las funciones habilitadas por tus permisos: "
+                    f"{self._describe_allowed_capabilities(request.permissions)}."
                 ),
                 state=ChatState.IDLE,
                 intent=intent,
@@ -327,6 +407,7 @@ class ChatOrchestratorService:
         next_action: str,
         ui_action: UiActionType = UiActionType.NONE,
         requires_confirmation: bool = False,
+        action_ref: str | None = None,
         links: list[ChatLink] | None = None,
         metadata_extra: dict | None = None,
     ) -> ChatProcessResponse:
@@ -348,11 +429,41 @@ class ChatOrchestratorService:
             context=ChatContext(
                 intent=intent,
                 requiresConfirmation=requires_confirmation,
+                actionRef=action_ref,
                 saleOrigin="CHATBOT",
                 nextAction=next_action,
                 metadata=metadata,
             ),
         )
+
+    def _permission_denied_response(
+        self,
+        request: ChatProcessRequest,
+        intent: str,
+    ) -> ChatProcessResponse:
+        required = self.permission_service.required_permissions_for_intent(intent)
+        return self._build_response(
+            request=request,
+            response=self._permission_denied_message(intent),
+            state=ChatState.FAILED,
+            intent=intent,
+            next_action="PERMISSION_DENIED",
+            metadata_extra={"requiredPermissions": required},
+        )
+
+    def _permission_denied_message(self, intent: str) -> str:
+        messages = {
+            "catalog_search": "No tienes permisos para consultar el catalogo.",
+            "book_detail": "No tienes permisos para consultar detalles de libros.",
+            "stock_check": "No tienes permisos para consultar disponibilidad o inventario.",
+            "purchase_intent": "No tienes permisos para iniciar compras por chat.",
+            "invoice_query": "No tienes permisos para consultar facturas.",
+            "sales_query": "No tienes permisos para consultar ventas.",
+            "inventory_entry": "No tienes permisos para registrar entradas de inventario.",
+            "transfer_request": "No tienes permisos para crear solicitudes de traslado.",
+            "purchase_request": "No tienes permisos para crear solicitudes de compra interna.",
+        }
+        return messages.get(intent, "No tienes permisos para realizar esta accion.")
 
     def _extract_catalog_query(self, message: str) -> str | None:
         normalized = self._normalize(message)
@@ -381,6 +492,26 @@ class ChatOrchestratorService:
         match = re.search(r"\bFAC-\d{4,}\b", message.upper())
         return match.group(0) if match else None
 
+    def _extract_quantity(self, message: str) -> int | None:
+        match = re.search(r"\b(\d+)\b", message)
+        if match:
+            return int(match.group(1))
+
+        normalized = self._normalize(message)
+        quantity_words = {
+            "un": 1,
+            "una": 1,
+            "uno": 1,
+            "dos": 2,
+            "tres": 3,
+            "cuatro": 4,
+            "cinco": 5,
+        }
+        for word, quantity in quantity_words.items():
+            if re.search(rf"\b{word}\b", normalized):
+                return quantity
+        return None
+
     def _find_book_from_message(self, message: str) -> dict | None:
         normalized = self._normalize(message)
         for book in self.mock_client.search_books():
@@ -400,6 +531,25 @@ class ChatOrchestratorService:
             "price": book["price"],
             "available": book["available"],
         }
+
+    def _describe_allowed_capabilities(self, permissions: list[str]) -> str:
+        capabilities = []
+        if self.permission_service.has_any_permission(permissions, ["books.read", "books.search"]):
+            capabilities.append("catalogo y disponibilidad")
+        if self.permission_service.has_any_permission(permissions, ["cart.manage", "sales.create"]):
+            capabilities.append("preparacion de compras con confirmacion")
+        if self.permission_service.has_any_permission(permissions, ["invoices.read_own", "invoices.read_all"]):
+            capabilities.append("consulta de facturas")
+        if self.permission_service.has_any_permission(permissions, ["sales.read_own", "sales.read_all"]):
+            capabilities.append("consulta de ventas")
+        if self.permission_service.has_any_permission(permissions, ["inventory.entry", "inventory.read"]):
+            capabilities.append("inventario")
+        if self.permission_service.has_any_permission(
+            permissions,
+            ["requests.transfer.create", "requests.purchase.create"],
+        ):
+            capabilities.append("solicitudes internas")
+        return ", ".join(capabilities) if capabilities else "ayuda general del chat"
 
     def _normalize(self, value: str) -> str:
         without_accents = "".join(
