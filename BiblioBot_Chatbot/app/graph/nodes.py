@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from app.schemas.chat_contract import ChatLink, ChatProcessRequest, ChatState, UiActionType
+from app.services.auth_required_service import AuthRequiredService
 from app.services.confirmation_service import ConfirmationService
 from app.services.llm_assistant_service import LlmAssistantService
 from app.services.permission_service import PermissionService
@@ -25,6 +26,7 @@ from app.graph.state import ChatGraphState
 
 
 SENSITIVE_INTENTS = {"purchase_intent", "inventory_entry", "transfer_request", "purchase_request"}
+AUTH_REQUIRED_SERVICE = AuthRequiredService()
 ALLOWED_INTENTS = [
     "catalog_search",
     "book_detail",
@@ -55,7 +57,7 @@ def normalize_input_node(state: ChatGraphState) -> ChatGraphState:
     return {
         **state,
         "session_id": request.sessionId,
-        "user_id": str(request.userId),
+        "user_id": str(request.userId) if request.userId else None,
         "user_email": request.userEmail,
         "roles": list(request.roles),
         "permissions": list(request.permissions),
@@ -160,6 +162,8 @@ def make_permission_check_node(permission_service: PermissionService) -> Callabl
     def permission_check_node(state: ChatGraphState) -> ChatGraphState:
         intent = state.get("intent", "unknown")
         permissions = state.get("permissions", [])
+        if _is_guest_state(state) and AUTH_REQUIRED_SERVICE.requires_authenticated_user(intent):
+            return _auth_required_response(state, intent)
         if not permission_service.can_access_intent(intent, permissions):
             required = permission_service.required_permissions_for_intent(intent)
             return _terminal_response(
@@ -549,6 +553,31 @@ def _terminal_response(
     }
 
 
+def _auth_required_response(state: ChatGraphState, original_intent: str) -> ChatGraphState:
+    metadata = {
+        **state.get("metadata", {}),
+        "detectedIntent": "auth_required",
+        "originalIntent": original_intent,
+        "authRequired": True,
+        "guest": True,
+    }
+    return {
+        **state,
+        "response": "Para continuar con esa accion necesitas iniciar sesion o crear una cuenta.",
+        "state": ChatState.NEEDS_CLARIFICATION.value,
+        "intent": "auth_required",
+        "ui_action": UiActionType.NONE.value,
+        "links": AUTH_REQUIRED_SERVICE.build_auth_links(),
+        "metadata": metadata,
+        "requires_confirmation": False,
+        "action_ref": None,
+        "pending_action": None,
+        "tool_result": None,
+        "next_step": "AUTH_REQUIRED",
+        "is_terminal": True,
+    }
+
+
 def _tool_context(state: ChatGraphState) -> ToolExecutionContext:
     return ToolExecutionContext(
         session_id=state.get("session_id", ""),
@@ -556,6 +585,14 @@ def _tool_context(state: ChatGraphState) -> ToolExecutionContext:
         roles=state.get("roles", []),
         permissions=state.get("permissions", []),
         source=state.get("source", "DOTNET_BACKEND"),
+    )
+
+
+def _is_guest_state(state: ChatGraphState) -> bool:
+    return AUTH_REQUIRED_SERVICE.is_guest_context(
+        state.get("roles", []),
+        state.get("user_id"),
+        state.get("permissions", []),
     )
 
 
@@ -697,12 +734,14 @@ def _catalog_filters(query: str | None) -> dict[str, str]:
 
 
 def _base_metadata(request: ChatProcessRequest, intent: str) -> dict[str, Any]:
+    guest = AUTH_REQUIRED_SERVICE.is_guest_context(request.roles, request.userId, request.permissions)
     return {
         "sessionId": request.sessionId,
         "source": request.source,
         "roles": request.roles,
         "permissions": request.permissions,
         "detectedIntent": intent,
+        "guest": guest,
     }
 
 

@@ -1,4 +1,5 @@
 from app.clients import MockDotNetClient
+from app.services.auth_required_service import AuthRequiredService
 from app.services.confirmation_service import ConfirmationService
 from app.services.permission_service import PermissionService
 from app.tools.tool_context import ToolExecutionContext
@@ -25,10 +26,12 @@ class BiblioBotToolService:
         mock_client: MockDotNetClient | None = None,
         permission_service: PermissionService | None = None,
         confirmation_service: ConfirmationService | None = None,
+        auth_required_service: AuthRequiredService | None = None,
     ):
         self.mock_client = mock_client or MockDotNetClient()
         self.permission_service = permission_service or PermissionService()
         self.confirmation_service = confirmation_service or ConfirmationService()
+        self.auth_required_service = auth_required_service or AuthRequiredService()
 
     def search_books(self, input_data: SearchBooksInput, context: ToolExecutionContext) -> dict:
         if not self._has_any_permission(context, ["books.read", "books.search"]):
@@ -62,6 +65,10 @@ class BiblioBotToolService:
         return {"status": "MOCK_ONLY", "mode": "READ_ONLY", "stock": stock}
 
     def get_cart(self, input_data: GetCartInput, context: ToolExecutionContext) -> dict:
+        auth_required = self._auth_required_if_guest(context, "cart_read")
+        if auth_required:
+            return auth_required
+
         if not self._has_any_permission(context, ["cart.read", "cart.manage"]):
             return self._permission_denied(["cart.read", "cart.manage"])
 
@@ -73,6 +80,10 @@ class BiblioBotToolService:
         input_data: AddOrUpdateCartItemInput,
         context: ToolExecutionContext,
     ) -> dict:
+        auth_required = self._auth_required_if_guest(context, "cart_manage")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "cart.manage"):
             return self._permission_denied(["cart.manage"])
 
@@ -84,6 +95,10 @@ class BiblioBotToolService:
         )
 
     def create_sale_from_cart(self, input_data: CreateSaleFromCartInput, context: ToolExecutionContext) -> dict:
+        auth_required = self._auth_required_if_guest(context, "create_sale")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "sales.create"):
             return self._permission_denied(["sales.create"])
 
@@ -101,6 +116,10 @@ class BiblioBotToolService:
         )
 
     def confirm_sale(self, input_data: ConfirmSaleInput, context: ToolExecutionContext) -> dict:
+        auth_required = self._auth_required_if_guest(context, "confirm_sale")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "sales.confirm"):
             return self._permission_denied(["sales.confirm"])
 
@@ -112,6 +131,10 @@ class BiblioBotToolService:
         )
 
     def get_invoice(self, input_data: GetInvoiceInput, context: ToolExecutionContext) -> dict:
+        auth_required = self._auth_required_if_guest(context, "invoice_query")
+        if auth_required:
+            return auth_required
+
         if not self._has_any_permission(context, ["invoices.read_own", "invoices.read_all"]):
             return self._permission_denied(["invoices.read_own", "invoices.read_all"])
 
@@ -135,6 +158,10 @@ class BiblioBotToolService:
         }
 
     def query_sales(self, input_data: QuerySalesInput, context: ToolExecutionContext) -> dict:
+        auth_required = self._auth_required_if_guest(context, "sales_query")
+        if auth_required:
+            return auth_required
+
         if input_data.scope == "all" and not self._has_permission(context, "sales.read_all"):
             return self._permission_denied(["sales.read_all"])
         if input_data.scope == "own" and not self._has_any_permission(context, ["sales.read_own", "sales.read_all"]):
@@ -150,6 +177,10 @@ class BiblioBotToolService:
         }
 
     def query_inventory(self, input_data: QueryInventoryInput, context: ToolExecutionContext) -> dict:
+        auth_required = self._auth_required_if_guest(context, "inventory_query")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "inventory.read"):
             return self._permission_denied(["inventory.read"])
 
@@ -180,6 +211,10 @@ class BiblioBotToolService:
         input_data: RegisterInventoryEntryInput,
         context: ToolExecutionContext,
     ) -> dict:
+        auth_required = self._auth_required_if_guest(context, "inventory_entry")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "inventory.entry"):
             return self._permission_denied(["inventory.entry"])
 
@@ -200,6 +235,10 @@ class BiblioBotToolService:
         input_data: CreatePurchaseRequestInput,
         context: ToolExecutionContext,
     ) -> dict:
+        auth_required = self._auth_required_if_guest(context, "purchase_request")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "requests.purchase.create"):
             return self._permission_denied(["requests.purchase.create"])
 
@@ -220,6 +259,10 @@ class BiblioBotToolService:
         input_data: CreateTransferRequestInput,
         context: ToolExecutionContext,
     ) -> dict:
+        auth_required = self._auth_required_if_guest(context, "transfer_request")
+        if auth_required:
+            return auth_required
+
         if not self._has_permission(context, "requests.transfer.create"):
             return self._permission_denied(["requests.transfer.create"])
 
@@ -267,6 +310,21 @@ class BiblioBotToolService:
 
     def _has_any_permission(self, context: ToolExecutionContext, permissions: list[str]) -> bool:
         return self.permission_service.has_any_permission(context.permissions, permissions)
+
+    def _auth_required_if_guest(self, context: ToolExecutionContext, intent: str) -> dict | None:
+        if not self.auth_required_service.is_guest_context(context.roles, context.user_id, context.permissions):
+            return None
+        if not self.auth_required_service.requires_authenticated_user(intent):
+            return None
+
+        return {
+            "status": "AUTH_REQUIRED",
+            "mode": "BLOCKED",
+            "requiresAuthentication": True,
+            "originalIntent": intent,
+            "links": [link.model_dump() for link in self.auth_required_service.build_auth_links()],
+            "message": "Para continuar con esa accion necesitas iniciar sesion o crear una cuenta.",
+        }
 
     def _permission_denied(self, required_permissions: list[str]) -> dict:
         return {

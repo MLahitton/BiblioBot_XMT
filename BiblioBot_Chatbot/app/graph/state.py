@@ -6,7 +6,7 @@ from app.schemas.chat_contract import ChatLink, ChatProcessRequest
 class ChatGraphState(TypedDict, total=False):
     request: ChatProcessRequest
     session_id: str
-    user_id: str
+    user_id: str | None
     user_email: str | None
     roles: list[str]
     permissions: list[str]

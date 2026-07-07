@@ -29,7 +29,7 @@ class UiActionType(StrEnum):
 class ChatProcessRequest(BaseModel):
     sessionId: str = ""
     message: str = Field(..., min_length=1)
-    userId: UUID
+    userId: UUID | None = None
     userEmail: str | None = None
     roles: list[str]
     permissions: list[str]
