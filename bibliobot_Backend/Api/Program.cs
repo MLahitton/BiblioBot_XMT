@@ -5,6 +5,8 @@ using Application.Common.Interfaces;
 using Infrastructure;
 using Infrastructure.Security;
 using Api.Extensions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.OpenApi.Models;
 using Microsoft.IdentityModel.Tokens;

@@ -1,6 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 using Application.Common.Interfaces;
+using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,15 +12,19 @@ namespace Infrastructure.Persistence.SeedData;
 public class BiblioBotDatabaseSeeder : IDatabaseSeeder
 {
     private readonly BiblioBotDbContext _dbContext;
+    private readonly IPasswordHasher _passwordHasher;
 
-    public BiblioBotDatabaseSeeder(BiblioBotDbContext dbContext)
+    public BiblioBotDatabaseSeeder(BiblioBotDbContext dbContext, IPasswordHasher passwordHasher)
     {
         _dbContext = dbContext;
+        _passwordHasher = passwordHasher;
     }
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var adminRoleSeed = AuthSeedData.Roles.First(role => role.Code == RoleCodes.Admin);
 
         foreach (var seedRole in AuthSeedData.Roles)
         {
@@ -73,6 +79,42 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
                     RoleId = seedRolePermission.RoleId,
                     PermissionId = seedRolePermission.PermissionId
                 });
+            }
+        }
+
+        var adminRole = await _dbContext.Roles
+            .FirstOrDefaultAsync(role => role.Code == adminRoleSeed.Code, cancellationToken);
+
+        if (adminRole is not null)
+        {
+            var adminPermissionIds = await _dbContext.RolePermissions
+                .Where(rolePermission => rolePermission.RoleId == adminRole.Id)
+                .Select(rolePermission => rolePermission.PermissionId)
+                .ToListAsync(cancellationToken);
+
+            var adminPermissionsSet = new HashSet<Guid>(adminPermissionIds);
+
+            foreach (var seedPermission in AuthSeedData.Permissions)
+            {
+                var permission = await _dbContext.Permissions.FirstOrDefaultAsync(
+                    permission => permission.Code == seedPermission.Code,
+                    cancellationToken);
+
+                if (permission is null)
+                {
+                    continue;
+                }
+
+                if (!adminPermissionsSet.Contains(permission.Id))
+                {
+                    _dbContext.RolePermissions.Add(new RolePermission
+                    {
+                        RoleId = adminRole.Id,
+                        PermissionId = permission.Id,
+                    });
+
+                    adminPermissionsSet.Add(permission.Id);
+                }
             }
         }
 
@@ -160,6 +202,53 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
                     Code = seedRequestStatus.Code,
                     Name = seedRequestStatus.Name
                 });
+            }
+        }
+
+        adminRole = await _dbContext.Roles
+            .FirstOrDefaultAsync(role => role.Code == adminRoleSeed.Code && role.IsActive, cancellationToken);
+
+        foreach (var seedUser in AuthSeedData.BootstrapUsers)
+        {
+            var email = seedUser.Email.Trim().ToLowerInvariant();
+            var user = await _dbContext.Users.FirstOrDefaultAsync(
+                existingUser => existingUser.Id == seedUser.Id || existingUser.Email == email,
+                cancellationToken);
+
+            if (user is null)
+            {
+                user = new User
+                {
+                    Id = seedUser.Id,
+                    FullName = seedUser.FullName,
+                    Email = email,
+                    PasswordHash = string.Empty,
+                    IsActive = seedUser.IsActive,
+                };
+
+                user.PasswordHash = _passwordHasher.HashPassword(user, seedUser.TempPassword);
+                _dbContext.Users.Add(user);
+            }
+            else
+            {
+                user.IsActive = seedUser.IsActive;
+            }
+
+            if (adminRole is not null)
+            {
+                var hasAdminRole = await _dbContext.UserRoles.AnyAsync(
+                    userRole => userRole.UserId == user.Id && userRole.RoleId == adminRole.Id,
+                    cancellationToken);
+
+                if (!hasAdminRole)
+                {
+                    _dbContext.UserRoles.Add(new UserRole
+                    {
+                        UserId = user.Id,
+                        RoleId = adminRole.Id,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
+                }
             }
         }
 

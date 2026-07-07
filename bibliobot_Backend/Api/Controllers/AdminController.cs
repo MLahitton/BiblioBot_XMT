@@ -1,10 +1,14 @@
 using System.Security.Claims;
 using Application.Features.Admin.ActivateAdminUser;
 using Application.Features.Admin.DeactivateAdminUser;
+using Application.Features.Admin.CreateAdminUser;
+using Application.Features.Admin.AssignUserRole;
 using Application.Features.Admin.GetAdminPermissions;
 using Application.Features.Admin.GetAdminRoles;
 using Application.Features.Admin.GetAdminUserById;
 using Application.Features.Admin.GetAdminUsers;
+using Application.Features.Admin.RemoveUserRole;
+using Api.Contracts.Admin;
 using Domain.Constants;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -63,6 +67,55 @@ public sealed class AdminController : ControllerBase
         }
 
         return Ok(result);
+    }
+
+    [HttpPost("usuarios")]
+    [Authorize]
+    public async Task<IActionResult> CreateUser(
+        [FromBody] CreateAdminUserRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetAuthenticatedUserId(out var actorId))
+        {
+            return Unauthorized(new { message = "No se pudo autenticar al usuario." });
+        }
+
+        if (!HasPermission(PermissionCodes.AdminUsersRead) || !HasPermission(PermissionCodes.AdminRolesRead))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var result = await _sender.Send(
+                new CreateAdminUserCommand
+                {
+                    FullName = request.FullName,
+                    Email = request.Email,
+                    Password = request.Password,
+                    RoleCodes = request.RoleCodes,
+                    ActorUserId = actorId,
+                },
+                cancellationToken);
+
+            return CreatedAtAction(nameof(GetUserById), new { id = result.Id }, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
     }
 
     [HttpGet("roles")]
@@ -173,6 +226,104 @@ public sealed class AdminController : ControllerBase
         }
     }
 
+    [HttpPost("usuarios/{id:guid}/roles")]
+    [Authorize(Policy = PermissionCodes.AdminUsersRead)]
+    [Authorize(Policy = PermissionCodes.AdminRolesRead)]
+    public async Task<IActionResult> AssignUserRole(
+        [FromRoute] Guid id,
+        [FromBody] AssignUserRoleRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetAuthenticatedUserId(out var actorId))
+        {
+            return Unauthorized(new { message = "No se pudo autenticar al usuario." });
+        }
+
+        try
+        {
+            var result = await _sender.Send(
+                new AssignUserRoleCommand
+                {
+                    UserId = id,
+                    RoleCode = request.RoleCode,
+                    ActorUserId = actorId,
+                },
+                cancellationToken);
+
+            if (result is null)
+            {
+                return NotFound(new { message = "Usuario no encontrado." });
+            }
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("usuarios/{id:guid}/roles/{roleCode}")]
+    [Authorize(Policy = PermissionCodes.AdminUsersRead)]
+    [Authorize(Policy = PermissionCodes.AdminRolesRead)]
+    public async Task<IActionResult> RemoveUserRole(
+        [FromRoute] Guid id,
+        [FromRoute] string roleCode,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetAuthenticatedUserId(out var actorId))
+        {
+            return Unauthorized(new { message = "No se pudo autenticar al usuario." });
+        }
+
+        try
+        {
+            var result = await _sender.Send(
+                new RemoveUserRoleCommand
+                {
+                    UserId = id,
+                    RoleCode = roleCode,
+                    ActorUserId = actorId,
+                },
+                cancellationToken);
+
+            if (result is null)
+            {
+                return NotFound(new { message = "Usuario no encontrado." });
+            }
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
     private bool TryGetAuthenticatedUserId(out Guid userId)
     {
         userId = Guid.Empty;
@@ -180,5 +331,7 @@ public sealed class AdminController : ControllerBase
 
         return Guid.TryParse(claim, out userId);
     }
-}
 
+    private bool HasPermission(string permission)
+        => User.HasClaim("permission", permission);
+}

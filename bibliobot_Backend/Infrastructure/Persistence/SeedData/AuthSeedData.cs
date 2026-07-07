@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+
 using Domain.Constants;
 
 namespace Infrastructure.Persistence.SeedData;
@@ -65,6 +66,16 @@ public static class AuthSeedData
         new SeedPermission(PermissionSeedId(37), PermissionCodes.ReportsInventoryRead, "Ver reporte de inventario", null)
     };
 
+    public static IReadOnlyCollection<SeedUser> BootstrapUsers { get; } = new[]
+    {
+        new SeedUser(
+            UserSeedId(1),
+            "Admin Bootstrap",
+            "admin.bootstrap@bibliobot.test",
+            "Admin_Bootstrap_123!",
+            true)
+    };
+
     private static Guid RoleSeedId(int number)
     {
         return new Guid($"10000000-0000-0000-0000-{number:000000000000}");
@@ -73,5 +84,10 @@ public static class AuthSeedData
     private static Guid PermissionSeedId(int number)
     {
         return new Guid($"20000000-0000-0000-0000-{number:000000000000}");
+    }
+
+    private static Guid UserSeedId(int number)
+    {
+        return new Guid($"90000000-0000-0000-0000-{number:000000000000}");
     }
 }
