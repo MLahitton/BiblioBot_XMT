@@ -166,8 +166,8 @@ export function ScrollExpansionHero({ children }: ScrollExpansionHeroProps) {
                     }}
                   >
                     <div className="hero-wordmark-stage text-[4.8rem] font-black leading-[0.72] sm:text-[9rem] md:text-[12rem] lg:text-[15rem]">
-                      <h1 className="hero-wordmark select-none" data-text="Books">Books</h1>
-                      <span className="hero-wordmark-sheen" aria-hidden="true">Books</span>
+                      <h1 className="hero-wordmark select-none" data-text="WeBooks">WeBooks</h1>
+                      <span className="hero-wordmark-sheen" aria-hidden="true">WeBooks</span>
                     </div>
                   </motion.div>
                   

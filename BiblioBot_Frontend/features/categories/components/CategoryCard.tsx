@@ -81,6 +81,7 @@ export function CategoryCard({
 
   return (
     <motion.a
+      id={category.slug}
       href={`#${category.slug}`}
       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${palette.surface} ${palette.text} ${palette.shadow} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
       initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
