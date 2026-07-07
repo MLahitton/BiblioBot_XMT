@@ -8,6 +8,14 @@ namespace Application.Features.Chat.SendChatMessage;
 
 public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMessageCommand, ChatMessageResponseDto>
 {
+    private static readonly string[] GuestRoles = ["GUEST"];
+    private static readonly string[] GuestPermissions =
+    [
+        "chat.message",
+        "books.read",
+        "books.search"
+    ];
+
     private static readonly string[] AllowedUiActions =
     [
         "NAVIGATE_TO_CATALOG",
@@ -59,23 +67,50 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
             throw new ArgumentException("message no puede superar los 4000 caracteres.");
         }
 
-        if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
+        IReadOnlyCollection<string> roles = [];
+        IReadOnlyCollection<string> permissions = [];
+        Guid? actorId = null;
+        Domain.Entities.User? user = null;
+
+        if (!request.IsGuest)
         {
-            throw new UnauthorizedAccessException("Usuario no autenticado.");
+            if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
+            {
+                throw new UnauthorizedAccessException("Usuario no autenticado.");
+            }
+
+            actorId = _currentUserService.UserId.Value;
+            user = await _context.Users.FirstOrDefaultAsync(
+                existingUser => existingUser.Id == actorId,
+                cancellationToken);
+
+            if (user is null || !user.IsActive || user.IsDeleted)
+            {
+                throw new UnauthorizedAccessException("Usuario no autenticado.");
+            }
+
+            roles = await ResolveRolesAsync(request, actorId.Value, cancellationToken);
+            permissions = await ResolvePermissionsAsync(request, actorId.Value, roles, cancellationToken);
         }
-
-        var actorId = _currentUserService.UserId.Value;
-        var user = await _context.Users.FirstOrDefaultAsync(
-            existingUser => existingUser.Id == actorId,
-            cancellationToken);
-
-        if (user is null || !user.IsActive || user.IsDeleted)
+        else
         {
-            throw new UnauthorizedAccessException("Usuario no autenticado.");
-        }
+            if (request.UserId.HasValue && request.UserId.Value == Guid.Empty)
+            {
+                actorId = null;
+            }
+            else
+            {
+                actorId = request.UserId;
+            }
 
-        var roles = await ResolveRolesAsync(request, actorId, cancellationToken);
-        var permissions = await ResolvePermissionsAsync(request, actorId, roles, cancellationToken);
+            roles = request.RolesFromClaims.Count > 0
+                ? request.RolesFromClaims.Select(role => role.Trim()).Distinct().ToArray()
+                : GuestRoles;
+
+            permissions = request.PermissionsFromClaims.Count > 0
+                ? request.PermissionsFromClaims.Select(permission => permission.Trim()).Distinct().ToArray()
+                : GuestPermissions;
+        }
 
         var conversation = await _context.ChatConversations
             .FirstOrDefaultAsync(existing => existing.SessionId == sessionId, cancellationToken);
@@ -113,7 +148,9 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
             SessionId = sessionId,
             Message = message,
             UserId = actorId,
-            UserEmail = _currentUserService.Email ?? user.Email,
+            UserEmail = request.IsGuest
+                ? request.UserEmail
+                : (_currentUserService.Email ?? user?.Email),
             Roles = roles,
             Permissions = permissions,
             Source = "DOTNET_BACKEND",
@@ -180,7 +217,7 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
 
     private static ChatLog BuildAssistantErrorLog(
         ChatConversation conversation,
-        Guid actorId,
+        Guid? actorId,
         string errorMessage,
         DateTimeOffset createdAt)
     {
