@@ -16,12 +16,8 @@ export const bookRequiredFields = [
 export const bookApiRequiredFields = [
   "id",
   "title",
-  "author",
-  "category",
   "price",
-  "rating",
-  "image_url",
-  "description",
-  "stock",
-  "slug",
+  "authors",
+  "categories",
+  "totalStock",
 ] satisfies Array<keyof BookApiResponse>;

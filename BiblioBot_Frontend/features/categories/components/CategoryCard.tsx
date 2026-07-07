@@ -73,7 +73,7 @@ export function CategoryCard({
   revealDelay = 0,
 }: CategoryCardProps) {
   const shouldReduceMotion = useReducedMotion();
-  const palette = categoryPalette[category.id] ?? categoryPalette.science;
+  const palette = categoryPalette[category.slug] ?? categoryPalette.science;
   const shouldInvertIcon =
     palette.icon.includes("#351E1C") ||
     palette.icon.includes("#733635") ||

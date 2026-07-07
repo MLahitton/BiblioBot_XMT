@@ -5,9 +5,10 @@ import { landingCopy } from "../data/landing-copy.data";
 
 type CategorySectionProps = {
   categories: Category[];
+  totalBooks: number;
 };
 
-export function CategorySection({ categories }: CategorySectionProps) {
+export function CategorySection({ categories, totalBooks }: CategorySectionProps) {
   return (
     <aside id="categorias" className="lg:sticky lg:top-24 lg:h-fit">
       <h2 className="text-lg font-extrabold text-foreground">
@@ -29,16 +30,22 @@ export function CategorySection({ categories }: CategorySectionProps) {
           </span>
           <span className="flex-1">Todos los libros</span>
           <span className="rounded-md bg-accent px-1.5 py-0.5 text-[0.62rem] font-black text-paper">
-            32
+            {totalBooks}
           </span>
         </a>
-        {categories.slice(0, 6).map((category, index) => (
-          <CategoryCard
-            key={category.id}
-            category={category}
-            revealDelay={index * 0.04}
-          />
-        ))}
+        {categories.length > 0 ? (
+          categories.slice(0, 6).map((category, index) => (
+            <CategoryCard
+              key={category.id}
+              category={category}
+              revealDelay={index * 0.04}
+            />
+          ))
+        ) : (
+          <p className="px-3 py-2 text-xs font-bold text-muted">
+            No hay categorias disponibles.
+          </p>
+        )}
       </nav>
     </aside>
   );

@@ -6,6 +6,7 @@ import {
   getBookBySlug,
   getBooks,
 } from "@/features/books/services/books.service";
+import type { Book } from "@/features/books/types/book.types";
 import { BiblioBotChatWidget } from "@/features/home/components/BiblioBotChatWidget";
 import { ChatProvider } from "@/features/home/components/ChatContext";
 import { PageShell } from "@/features/home/components/PageShell";
@@ -14,16 +15,23 @@ type BookPageProps = {
   params: Promise<{ slug: string }>;
 };
 
+export const dynamic = "force-dynamic";
+
 export async function generateStaticParams() {
-  const books = await getBooks();
-  return books.map((book) => ({ slug: book.slug }));
+  return [];
 }
 
 export async function generateMetadata({
   params,
 }: BookPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const book = await getBookBySlug(slug);
+  let book: Book | undefined;
+
+  try {
+    book = await getBookBySlug(slug);
+  } catch {
+    book = undefined;
+  }
 
   if (!book) {
     return {
@@ -39,7 +47,14 @@ export async function generateMetadata({
 
 export default async function BookPage({ params }: BookPageProps) {
   const { slug } = await params;
-  const [book, books] = await Promise.all([getBookBySlug(slug), getBooks()]);
+  let book: Book | undefined;
+  let books: Book[] = [];
+
+  try {
+    [book, books] = await Promise.all([getBookBySlug(slug), getBooks()]);
+  } catch {
+    book = undefined;
+  }
 
   if (!book) {
     notFound();

@@ -82,6 +82,8 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
             }
         }
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         var adminRole = await _dbContext.Roles
             .FirstOrDefaultAsync(role => role.Code == adminRoleSeed.Code, cancellationToken);
 

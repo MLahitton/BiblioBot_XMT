@@ -5,6 +5,7 @@ export const routes = {
   benefits: "/#beneficios",
   experience: "/#experiencia",
   cart: "/cart",
+  favorites: "/favorites",
   checkout: "/checkout",
   auth: "/auth",
   dashboard: "/dashboard",

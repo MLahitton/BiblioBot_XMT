@@ -1,7 +1,15 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import type { Book } from "../types/book.types";
 import { defaultPriceLocale, priceFormatOptions } from "@/constants/currency";
+import { CartAuthError, addBookToCart } from "@/features/cart/services/cart.service";
+import {
+  isFavoriteBook,
+  toggleFavorite,
+} from "@/features/favorites/services/favorites.service";
 
 type BookDetailPageProps = {
   book: Book;
@@ -32,6 +40,48 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
+  const [cartMessage, setCartMessage] = useState<string | null>(null);
+  const [cartError, setCartError] = useState<string | null>(null);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    window.setTimeout(() => setIsFavorite(isFavoriteBook(book.id)), 0);
+  }, [book.id]);
+
+  const handleAddToCart = async () => {
+    setIsAddingToCart(true);
+    setCartMessage(null);
+    setCartError(null);
+
+    try {
+      await addBookToCart(book.id, book.stock);
+      setCartMessage("Libro agregado al carrito.");
+    } catch (error) {
+      setCartError(
+        error instanceof CartAuthError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "No se pudo agregar el libro al carrito.",
+      );
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+
+  const handleToggleFavorite = () => {
+    const favorites = toggleFavorite(book);
+    const nextIsFavorite = favorites.some((favorite) => favorite.id === book.id);
+    setIsFavorite(nextIsFavorite);
+    setCartError(null);
+    setCartMessage(
+      nextIsFavorite
+        ? "Libro agregado a favoritos."
+        : "Libro eliminado de favoritos.",
+    );
+  };
+
   return (
     <main className="min-h-screen bg-background px-5 pb-16 pt-24 text-foreground sm:px-8 lg:px-12">
       <div className="mx-auto max-w-6xl">
@@ -137,9 +187,11 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <button
                 type="button"
-                className="flex h-14 flex-1 items-center justify-center rounded-full bg-foreground px-8 font-black text-paper shadow-[0_8px_20px_rgba(53,30,28,0.25)] transition hover:-translate-y-0.5 hover:bg-accent hover:shadow-[0_12px_28px_rgba(53,30,28,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                disabled={book.stock <= 0 || isAddingToCart}
+                onClick={handleAddToCart}
+                className="flex h-14 flex-1 items-center justify-center rounded-full bg-foreground px-8 font-black text-paper shadow-[0_8px_20px_rgba(53,30,28,0.25)] transition hover:-translate-y-0.5 hover:bg-accent hover:shadow-[0_12px_28px_rgba(53,30,28,0.35)] disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
-                Agregar al carrito
+                {isAddingToCart ? "Agregando..." : "Agregar al carrito"}
               </button>
               <button
                 type="button"
@@ -149,12 +201,17 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
               </button>
               <button
                 type="button"
-                aria-label="Agregar a lista de deseos"
-                className="flex h-14 w-full items-center justify-center rounded-full border-2 border-border bg-transparent text-muted transition hover:border-red-200 hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 sm:w-14"
+                aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                onClick={handleToggleFavorite}
+                className={`flex h-14 w-full items-center justify-center rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-14 ${
+                  isFavorite
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border bg-transparent text-muted hover:border-accent hover:bg-accent/5 hover:text-accent"
+                }`}
               >
                 <svg
                   className="h-6 w-6"
-                  fill="none"
+                  fill={isFavorite ? "currentColor" : "none"}
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                   strokeWidth="2.5"
@@ -168,6 +225,31 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
                 </svg>
               </button>
             </div>
+
+            {(cartMessage || cartError) && (
+              <div
+                className={`mt-4 rounded-[18px] border px-5 py-4 text-sm font-bold ${
+                  cartError
+                    ? "border-accent/25 bg-accent/5 text-foreground"
+                    : "border-[#b8d8c0] bg-[#eef8f0] text-[#315f3a]"
+                }`}
+              >
+                {cartError ?? cartMessage}
+                {cartError?.includes("iniciar sesion") ? (
+                  <Link href="/auth/login" className="ml-2 text-accent underline underline-offset-4">
+                    Iniciar sesion
+                  </Link>
+                ) : cartMessage?.includes("favoritos") ? (
+                  <Link href="/favorites" className="ml-2 text-accent underline underline-offset-4">
+                    Ver favoritos
+                  </Link>
+                ) : cartMessage ? (
+                  <Link href="/cart" className="ml-2 text-accent underline underline-offset-4">
+                    Ver carrito
+                  </Link>
+                ) : null}
+              </div>
+            )}
 
             <section id="resenas" className="mt-12 border-t border-border/60 pt-8">
               <h2 className="text-lg font-black text-foreground">

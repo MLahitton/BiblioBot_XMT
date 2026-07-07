@@ -9,6 +9,7 @@ type SearchResultsPageProps = {
   books: Book[];
   query: string;
   sort: SortOption;
+  error?: string | null;
 };
 
 type RankedBook = {
@@ -145,7 +146,7 @@ function ResultCard({ item }: { item: RankedBook }) {
   );
 }
 
-export function SearchResultsPage({ books, query, sort }: SearchResultsPageProps) {
+export function SearchResultsPage({ books, query, sort, error }: SearchResultsPageProps) {
   const results = getSortedResults(books, query, sort);
   const hasQuery = query.trim().length > 0;
 
@@ -190,7 +191,16 @@ export function SearchResultsPage({ books, query, sort }: SearchResultsPageProps
           </aside>
 
           <section className="min-w-0 flex-1">
-            {results.length > 0 ? (
+            {error ? (
+              <div className="border border-red-200 bg-red-50 p-8 text-center">
+                <h2 className="text-xl font-black text-red-700">
+                  No pudimos consultar el catalogo
+                </h2>
+                <p className="mt-2 text-sm font-semibold text-red-700/80">
+                  {error}
+                </p>
+              </div>
+            ) : results.length > 0 ? (
               <div className="grid gap-4">
                 {results.map((item) => (
                   <ResultCard key={item.book.id} item={item} />

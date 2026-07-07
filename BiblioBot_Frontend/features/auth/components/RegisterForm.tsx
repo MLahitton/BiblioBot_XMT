@@ -2,22 +2,48 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { register } from "../services/auth.service";
 
 export function RegisterForm() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
     if (password !== confirmPassword) {
-      alert("Las contraseñas no coinciden");
+      setError("Las contraseñas no coinciden.");
       return;
     }
-    // Simulate register
-    console.log({ name, email, password });
+
+    if (password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      await register({
+        fullName: name.trim(),
+        email: email.trim(),
+        password,
+      });
+      router.push("/");
+      router.refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "No se pudo crear la cuenta.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,11 +135,20 @@ export function RegisterForm() {
           />
         </div>
 
+        {error ? (
+          <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+            {error}
+          </p>
+        ) : null}
+
         <button
           type="submit"
+          disabled={isSubmitting}
           className="group relative mt-8 flex w-full h-14 items-center justify-center overflow-hidden rounded-full bg-foreground px-8 font-black text-paper shadow-[0_8px_20px_rgba(53,30,28,0.25)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(53,30,28,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
-          <span className="relative z-10">Registrarse</span>
+          <span className="relative z-10">
+            {isSubmitting ? "Creando cuenta..." : "Registrarse"}
+          </span>
           <div className="absolute inset-0 z-0 bg-gradient-to-r from-accent to-[#a0c9cb] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         </button>
       </form>
