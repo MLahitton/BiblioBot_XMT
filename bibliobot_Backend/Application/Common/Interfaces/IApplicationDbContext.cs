@@ -26,6 +26,7 @@ public interface IApplicationDbContext
 
     DbSet<Cart> Carts { get; }
     DbSet<CartItem> CartItems { get; }
+    DbSet<UserFavoriteBook> UserFavoriteBooks { get; }
 
     DbSet<SaleStatus> SaleStatuses { get; }
     DbSet<SaleOrigin> SaleOrigins { get; }

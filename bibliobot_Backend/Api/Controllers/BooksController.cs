@@ -5,6 +5,10 @@ using Application.Features.Books.DisableBook;
 using Application.Features.Books.ActivateBook;
 using Application.Features.Books.GetBooks;
 using Application.Features.Books.SearchBooks;
+using Application.Features.FavoriteBooks.AddFavoriteBook;
+using Application.Features.FavoriteBooks.GetFavoriteBookStatus;
+using Application.Features.FavoriteBooks.ListFavoriteBooks;
+using Application.Features.FavoriteBooks.RemoveFavoriteBook;
 using Api.Contracts.Books;
 using Domain.Constants;
 using MediatR;
@@ -215,5 +219,94 @@ public sealed class BooksController : ControllerBase
             cancellationToken);
 
         return Ok(result);
+    }
+
+    [HttpGet("favoritos")]
+    [Authorize]
+    public async Task<IActionResult> GetFavoriteBooks(
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(new ListFavoriteBooksQuery(), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("{bookId:guid}/favorito")]
+    [Authorize]
+    public async Task<IActionResult> GetFavoriteBookStatus(
+        [FromRoute] Guid bookId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(
+            new GetFavoriteBookStatusQuery { BookId = bookId },
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpPost("{bookId:guid}/favorito")]
+    [Authorize]
+    public async Task<IActionResult> AddFavoriteBook(
+        [FromRoute] Guid bookId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _sender.Send(
+                new AddFavoriteBookCommand { BookId = bookId },
+                cancellationToken);
+
+            return StatusCode(
+                StatusCodes.Status201Created,
+                result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("{bookId:guid}/favorito")]
+    [Authorize]
+    public async Task<IActionResult> RemoveFavoriteBook(
+        [FromRoute] Guid bookId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var removed = await _sender.Send(
+                new RemoveFavoriteBookCommand { BookId = bookId },
+                cancellationToken);
+
+            if (!removed)
+            {
+                return NotFound(new { message = "El libro no está en favoritos." });
+            }
+
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
     }
 }
