@@ -29,6 +29,19 @@ class ChatOrchestratorService:
         self.llm_assistant_service = llm_assistant_service or LlmAssistantService()
 
     def process(self, request: ChatProcessRequest) -> ChatProcessResponse:
+        try:
+            from app.graph.chat_graph_service import ChatGraphService
+
+            return ChatGraphService(
+                mock_client=self.mock_client,
+                permission_service=self.permission_service,
+                confirmation_service=self.confirmation_service,
+                llm_assistant_service=self.llm_assistant_service,
+            ).process(request)
+        except Exception:
+            return self._legacy_process(request)
+
+    def _legacy_process(self, request: ChatProcessRequest) -> ChatProcessResponse:
         if not request.sessionId.strip():
             return self._build_response(
                 request=request,
