@@ -9,6 +9,8 @@ export const routes = {
   checkout: "/checkout",
   auth: "/auth",
   dashboard: "/dashboard",
+  adminInventory: "/admin/inventario",
+  adminUsers: "/admin/usuarios",
 } as const;
 
 export type AppRoute = (typeof routes)[keyof typeof routes];
