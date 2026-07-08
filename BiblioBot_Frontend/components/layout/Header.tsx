@@ -8,13 +8,18 @@ import { routes } from "@/constants/routes";
 import type { AuthUser } from "@/features/auth/types/auth.types";
 import { getStoredSession } from "@/features/auth/services/auth-storage";
 import { logout } from "@/features/auth/services/auth.service";
+import { getFeaturedBooks } from "@/features/books/services/books.service";
 import { CART_UPDATED_EVENT, getCurrentCart } from "@/features/cart/services/cart.service";
-import { getCategories } from "@/features/categories/services/categories.service";
+import {
+  getCategories,
+  getCategoriesWithVisibleBooks,
+} from "@/features/categories/services/categories.service";
 import type { Category } from "@/features/categories/types/category.types";
 import {
   FAVORITES_UPDATED_EVENT,
   getFavoriteCount,
 } from "@/features/favorites/services/favorites.service";
+import { isAdminAccount } from "@/features/dashboard/services/admin-access";
 import { useChatContext } from "@/features/home/components/ChatContext";
 
 const visibleNavHrefs: string[] = [
@@ -95,21 +100,26 @@ export function Header() {
     const syncSession = () => {
       const session = getStoredSession();
       setUser(session?.user ?? null);
-      setFavoriteTotal(getFavoriteCount());
 
       if (session?.accessToken) {
         getCurrentCart()
           .then((cart) => setCartTotal(cart.totalItems))
           .catch(() => setCartTotal(0));
+        getFavoriteCount()
+          .then((total) => setFavoriteTotal(total))
+          .catch(() => setFavoriteTotal(0));
       } else {
         setCartTotal(0);
+        setFavoriteTotal(0);
       }
     };
 
     window.setTimeout(syncSession, 0);
 
-    getCategories()
-      .then((categories) => setCategories(categories.slice(0, 8)))
+    Promise.all([getCategories(), getFeaturedBooks()])
+      .then(([categories, books]) => {
+        setCategories(getCategoriesWithVisibleBooks(categories, books).slice(0, 8));
+      })
       .catch(() => setCategories([]));
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -142,7 +152,7 @@ export function Header() {
 
     const handleFavoritesUpdated = (event: Event) => {
       const favorites = (event as CustomEvent<unknown[]>).detail;
-      setFavoriteTotal(Array.isArray(favorites) ? favorites.length : getFavoriteCount());
+      setFavoriteTotal(Array.isArray(favorites) ? favorites.length : 0);
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -169,6 +179,7 @@ export function Header() {
     logout();
     setUser(null);
     setCartTotal(0);
+    setFavoriteTotal(0);
     setIsProfileMenuOpen(false);
     window.location.href = "/";
   };
@@ -179,7 +190,7 @@ export function Header() {
         isChatExpanded ? "sm:right-[420px]" : ""
       }`}
     >
-      <div className="mx-auto grid h-10 max-w-7xl grid-cols-[auto_minmax(140px,1fr)_auto] items-center gap-2 sm:grid-cols-[auto_minmax(200px,300px)_auto] sm:gap-4 md:grid-cols-[minmax(300px,1fr)_minmax(220px,300px)_minmax(260px,1fr)] md:gap-5">
+      <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-2 sm:gap-x-4 md:h-10 md:grid-cols-[minmax(300px,1fr)_minmax(220px,300px)_minmax(260px,1fr)] md:gap-5">
         <div className="flex min-w-0 items-center justify-start gap-5">
           <Link
             href="/"
@@ -198,7 +209,7 @@ export function Header() {
 
           <nav
             className="hidden min-w-0 items-center justify-start gap-6 md:flex"
-            aria-label="Navegacion principal"
+            aria-label="Navegación principal"
           >
             {navItems.map((item) =>
               item.href === routes.categories ? (
@@ -213,7 +224,7 @@ export function Header() {
                       setIsProfileMenuOpen(false);
                     }}
                   >
-                    Categorias
+                    Categorías
                     <ChevronIcon isOpen={isCategoryMenuOpen} />
                   </button>
 
@@ -227,14 +238,14 @@ export function Header() {
                   >
                     <div className="border-b border-border/70 px-4 py-3">
                       <p className="text-[0.62rem] font-black uppercase tracking-widest text-muted">
-                        Explorar por categoria
+                        Explorar por categoría
                       </p>
                     </div>
                     <div className="grid gap-1 p-2">
                       {categories.length > 0 ? categories.map((category) => (
                         <Link
                           key={category.id}
-                          href={`/#${category.slug}`}
+                          href={`/search?category=${encodeURIComponent(category.slug)}`}
                           className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                           onClick={() => setIsCategoryMenuOpen(false)}
                         >
@@ -258,7 +269,7 @@ export function Header() {
                         </Link>
                       )) : (
                         <span className="px-3 py-2.5 text-xs font-bold text-muted">
-                          Sin categorias disponibles
+                          Sin categorías disponibles
                         </span>
                       )}
                     </div>
@@ -279,7 +290,7 @@ export function Header() {
           </nav>
         </div>
 
-        <div className="min-w-0 justify-self-stretch">
+        <div className="col-span-3 min-w-0 justify-self-stretch md:col-span-1">
           <form
             className="min-w-0"
             role="search"
@@ -307,10 +318,10 @@ export function Header() {
           </form>
         </div>
 
-        <div className="flex min-w-0 shrink-0 items-center justify-end gap-3 justify-self-end sm:gap-4">
+        <div className="flex min-w-0 shrink-0 items-center justify-end gap-2 justify-self-end sm:gap-4">
           <Link
             href={routes.favorites}
-            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] text-foreground shadow-[0_6px_14px_rgba(53,30,28,0.06)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] text-foreground shadow-[0_6px_14px_rgba(53,30,28,0.06)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             aria-label="Ver favoritos"
           >
             <HeartIcon isFilled={favoriteTotal > 0} />
@@ -322,7 +333,7 @@ export function Header() {
           </Link>
           <Link
             href={routes.cart}
-            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] text-foreground shadow-[0_6px_14px_rgba(53,30,28,0.06)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] text-foreground shadow-[0_6px_14px_rgba(53,30,28,0.06)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10"
             aria-label="Ver carrito"
           >
             <Image src="/icons/cart.svg" alt="" width={18} height={18} />
@@ -332,12 +343,12 @@ export function Header() {
               </span>
             )}
           </Link>
-          <div className="hidden shrink-0 items-center gap-4 sm:flex">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             {user ? (
               <div ref={profileMenuRef} className="relative">
                 <button
                   type="button"
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-[rgba(53,30,28,0.26)] bg-[#f8efe9] text-[0.66rem] font-black text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_18px_rgba(53,30,28,0.08)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(53,30,28,0.26)] bg-[#f8efe9] text-[0.64rem] font-black text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_8px_18px_rgba(53,30,28,0.08)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:w-10 sm:text-[0.66rem]"
                   aria-label="Abrir menu de perfil"
                   aria-expanded={isProfileMenuOpen}
                   aria-controls="profile-menu"
@@ -367,6 +378,24 @@ export function Header() {
                     </span>
                   </div>
                   <div className="p-2">
+                    {isAdminAccount(user) && (
+                      <div className="mb-1 grid gap-1">
+                        <Link
+                          href={routes.adminInventory}
+                          className="flex h-10 w-full items-center justify-center rounded-xl text-[0.68rem] font-black text-foreground transition hover:bg-[#f8efe9] hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          onClick={() => setIsProfileMenuOpen(false)}
+                        >
+                          Inventario
+                        </Link>
+                        <Link
+                          href={routes.adminUsers}
+                          className="flex h-10 w-full items-center justify-center rounded-xl text-[0.68rem] font-black text-foreground transition hover:bg-[#f8efe9] hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          onClick={() => setIsProfileMenuOpen(false)}
+                        >
+                          Usuarios
+                        </Link>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -381,13 +410,14 @@ export function Header() {
               <>
                 <Link
                   href="/auth/login"
-                  className="flex h-10 items-center whitespace-nowrap rounded-full border border-[rgba(53,30,28,0.22)] px-4 text-[0.68rem] font-black text-foreground transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className="flex h-9 items-center whitespace-nowrap rounded-full border border-[rgba(53,30,28,0.22)] px-3 text-[0.64rem] font-black text-foreground transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:h-10 sm:px-4 sm:text-[0.68rem]"
                 >
-                  Iniciar sesion
+                  <span className="sm:hidden">Entrar</span>
+                  <span className="hidden sm:inline">Iniciar sesión</span>
                 </Link>
                 <Link
                   href="/auth/register"
-                  className="flex h-10 items-center whitespace-nowrap rounded-full border border-[rgba(53,30,28,0.32)] bg-foreground px-6 text-[0.68rem] font-black text-paper shadow-[0_8px_18px_rgba(53,30,28,0.18)] transition hover:border-accent hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  className="hidden h-10 items-center whitespace-nowrap rounded-full border border-[rgba(53,30,28,0.32)] bg-foreground px-6 text-[0.68rem] font-black text-paper shadow-[0_8px_18px_rgba(53,30,28,0.18)] transition hover:border-accent hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:flex"
                 >
                   Crear cuenta
                 </Link>
@@ -395,6 +425,38 @@ export function Header() {
             )}
           </div>
         </div>
+
+        <nav
+          className="col-span-3 flex min-w-0 items-center gap-2 overflow-x-auto pb-0.5 md:hidden"
+          aria-label="Navegación móvil"
+        >
+          <Link
+            href={routes.home}
+            className="flex h-8 shrink-0 items-center rounded-full border border-[rgba(53,30,28,0.18)] bg-paper px-3 text-[0.66rem] font-black text-accent shadow-sm"
+          >
+            Inicio
+          </Link>
+          <Link
+            href="/search"
+            className="flex h-8 shrink-0 items-center rounded-full border border-[rgba(53,30,28,0.18)] bg-[#f8efe9] px-3 text-[0.66rem] font-black text-foreground shadow-sm"
+          >
+            Categorías
+          </Link>
+          <Link
+            href={routes.featured}
+            className="flex h-8 shrink-0 items-center rounded-full border border-[rgba(53,30,28,0.18)] bg-paper px-3 text-[0.66rem] font-black text-foreground shadow-sm"
+          >
+            Destacados
+          </Link>
+          {user && isAdminAccount(user) ? (
+            <Link
+              href={routes.adminInventory}
+              className="flex h-8 shrink-0 items-center rounded-full border border-[rgba(53,30,28,0.2)] bg-foreground px-3 text-[0.66rem] font-black text-paper shadow-sm"
+            >
+              Admin
+            </Link>
+          ) : null}
+        </nav>
       </div>
     </header>
   );
