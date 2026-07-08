@@ -9,10 +9,14 @@ namespace Application.Features.Cart.ClearCart;
 public sealed class ClearCartCommandHandler : IRequestHandler<ClearCartCommand, CartDto?>
 {
     private readonly IApplicationDbContext _context;
+    private readonly ICurrentUserService _currentUserService;
 
-    public ClearCartCommandHandler(IApplicationDbContext context)
+    public ClearCartCommandHandler(
+        IApplicationDbContext context,
+        ICurrentUserService currentUserService)
     {
         _context = context;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CartDto?> Handle(ClearCartCommand request, CancellationToken cancellationToken)
@@ -24,11 +28,22 @@ public sealed class ClearCartCommandHandler : IRequestHandler<ClearCartCommand, 
             return null;
         }
 
+        var currentUserId = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
         var cart = await _context.Carts
             .Include(cart => cart.CartItems)
             .ThenInclude(item => item.Book)
+            .Where(cart =>
+                cart.Status == CartStatusCodes.Active &&
+                (
+                    (currentUserId.HasValue && cart.UserId == currentUserId.Value) ||
+                    (cart.SessionId == sessionId && (!cart.UserId.HasValue || cart.UserId == currentUserId))
+                ))
+            .OrderByDescending(cart => currentUserId.HasValue && cart.UserId == currentUserId.Value)
+            .ThenByDescending(cart => cart.UpdatedAt ?? cart.CreatedAt)
             .FirstOrDefaultAsync(
-                cart => cart.SessionId == sessionId && cart.Status == CartStatusCodes.Active,
                 cancellationToken);
 
         if (cart is null)

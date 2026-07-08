@@ -9,10 +9,14 @@ namespace Application.Features.Cart.GetCartBySession;
 public sealed class GetCartBySessionQueryHandler : IRequestHandler<GetCartBySessionQuery, CartDto?>
 {
     private readonly IApplicationDbContext _context;
+    private readonly ICurrentUserService _currentUserService;
 
-    public GetCartBySessionQueryHandler(IApplicationDbContext context)
+    public GetCartBySessionQueryHandler(
+        IApplicationDbContext context,
+        ICurrentUserService currentUserService)
     {
         _context = context;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CartDto?> Handle(
@@ -33,9 +37,20 @@ public sealed class GetCartBySessionQueryHandler : IRequestHandler<GetCartBySess
             };
         }
 
+        var currentUserId = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
         var cart = await _context.Carts
             .AsNoTracking()
-            .Where(cart => cart.SessionId == sessionId && cart.Status == CartStatusCodes.Active)
+            .Where(cart =>
+                cart.Status == CartStatusCodes.Active &&
+                (
+                    (currentUserId.HasValue && cart.UserId == currentUserId.Value) ||
+                    (cart.SessionId == sessionId && (!cart.UserId.HasValue || cart.UserId == currentUserId))
+                ))
+            .OrderByDescending(cart => currentUserId.HasValue && cart.UserId == currentUserId.Value)
+            .ThenByDescending(cart => cart.UpdatedAt ?? cart.CreatedAt)
             .Select(cart => new CartDto
             {
                 Id = cart.Id,

@@ -82,11 +82,20 @@ public sealed class AddOrUpdateCartItemCommandHandler : IRequestHandler<
             throw new InvalidOperationException("Stock insuficiente para agregar el libro al carrito.");
         }
 
+        var currentUserId = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
         var cart = await _context.Carts
-            .Include(cart => cart.CartItems)
-                .ThenInclude(item => item.Book)
+            .Where(cart =>
+                cart.Status == CartStatusCodes.Active &&
+                (
+                    (currentUserId.HasValue && cart.UserId == currentUserId.Value) ||
+                    (cart.SessionId == sessionId && (!cart.UserId.HasValue || cart.UserId == currentUserId))
+                ))
+            .OrderByDescending(cart => currentUserId.HasValue && cart.UserId == currentUserId.Value)
+            .ThenByDescending(cart => cart.UpdatedAt ?? cart.CreatedAt)
             .FirstOrDefaultAsync(
-                cart => cart.SessionId == sessionId && cart.Status == CartStatusCodes.Active,
                 cancellationToken);
 
         var isCreated = false;
@@ -100,25 +109,29 @@ public sealed class AddOrUpdateCartItemCommandHandler : IRequestHandler<
                 UpdatedAt = DateTimeOffset.UtcNow,
             };
 
-            if (_currentUserService.IsAuthenticated && _currentUserService.UserId.HasValue)
+            if (currentUserId.HasValue)
             {
-                cart.UserId = _currentUserService.UserId.Value;
+                cart.UserId = currentUserId.Value;
             }
 
             _context.Carts.Add(cart);
             isCreated = true;
         }
-        else if (_currentUserService.IsAuthenticated && _currentUserService.UserId.HasValue)
+        else if (currentUserId.HasValue)
         {
-            cart.UserId = _currentUserService.UserId.Value;
+            cart.UserId = currentUserId.Value;
+            cart.SessionId = sessionId;
         }
 
-        var existingItem = cart.CartItems.FirstOrDefault(item => item.BookId == request.BookId);
+        var existingItem = await _context.CartItems.FirstOrDefaultAsync(
+            item => item.CartId == cart.Id && item.BookId == request.BookId,
+            cancellationToken);
 
         if (existingItem is null)
         {
-            cart.CartItems.Add(new Domain.Entities.CartItem
+            _context.CartItems.Add(new Domain.Entities.CartItem
             {
+                CartId = cart.Id,
                 BookId = request.BookId,
                 Quantity = request.Quantity,
                 UnitPrice = book.Price,

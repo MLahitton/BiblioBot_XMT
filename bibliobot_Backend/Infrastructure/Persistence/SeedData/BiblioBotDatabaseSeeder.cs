@@ -207,8 +207,78 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
             }
         }
 
+        foreach (var (oldName, newName) in CategoryTaxonomySeedData.CategoryRenames)
+        {
+            var existingCategory = await _dbContext.Categories.FirstOrDefaultAsync(
+                category => category.Name.ToLower() == oldName.ToLower(),
+                cancellationToken);
+
+            if (existingCategory is null)
+            {
+                continue;
+            }
+
+            var targetCategory = await _dbContext.Categories.FirstOrDefaultAsync(
+                category => category.Id != existingCategory.Id && category.Name.ToLower() == newName.ToLower(),
+                cancellationToken);
+
+            if (targetCategory is not null)
+            {
+                var oldBookCategories = await _dbContext.BookCategories
+                    .Where(bookCategory => bookCategory.CategoryId == existingCategory.Id)
+                    .ToListAsync(cancellationToken);
+                var targetBookIds = await _dbContext.BookCategories
+                    .Where(bookCategory => bookCategory.CategoryId == targetCategory.Id)
+                    .Select(bookCategory => bookCategory.BookId)
+                    .ToListAsync(cancellationToken);
+                var targetBookIdSet = new HashSet<Guid>(targetBookIds);
+
+                foreach (var oldBookCategory in oldBookCategories)
+                {
+                    if (targetBookIdSet.Contains(oldBookCategory.BookId))
+                    {
+                        continue;
+                    }
+
+                    _dbContext.BookCategories.Add(new BookCategory
+                    {
+                        BookId = oldBookCategory.BookId,
+                        CategoryId = targetCategory.Id,
+                    });
+                }
+
+                _dbContext.BookCategories.RemoveRange(oldBookCategories);
+                existingCategory.IsActive = false;
+                existingCategory.UpdatedAt = DateTimeOffset.UtcNow;
+                continue;
+            }
+
+            existingCategory.Name = newName;
+            existingCategory.IsActive = true;
+            existingCategory.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        foreach (var categoryName in CategoryTaxonomySeedData.CategoryNames)
+        {
+            var exists = await _dbContext.Categories.AnyAsync(
+                category => category.Name.ToLower() == categoryName.ToLower(),
+                cancellationToken);
+
+            if (!exists)
+            {
+                _dbContext.Categories.Add(new Category
+                {
+                    Name = categoryName,
+                    IsActive = true,
+                });
+            }
+        }
+
         adminRole = await _dbContext.Roles
             .FirstOrDefaultAsync(role => role.Code == adminRoleSeed.Code && role.IsActive, cancellationToken);
+
+        var officialAdminSeed = AuthSeedData.BootstrapUsers
+            .FirstOrDefault(user => user.RoleCode == RoleCodes.Admin);
 
         foreach (var seedUser in AuthSeedData.BootstrapUsers)
         {
@@ -233,13 +303,20 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
             }
             else
             {
+                user.FullName = seedUser.FullName;
+                user.Email = email;
                 user.IsActive = seedUser.IsActive;
             }
 
-            if (adminRole is not null)
+            user.PasswordHash = _passwordHasher.HashPassword(user, seedUser.TempPassword);
+
+            var seedRole = await _dbContext.Roles
+                .FirstOrDefaultAsync(role => role.Code == seedUser.RoleCode && role.IsActive, cancellationToken);
+
+            if (seedRole is not null)
             {
                 var hasAdminRole = await _dbContext.UserRoles.AnyAsync(
-                    userRole => userRole.UserId == user.Id && userRole.RoleId == adminRole.Id,
+                    userRole => userRole.UserId == user.Id && userRole.RoleId == seedRole.Id,
                     cancellationToken);
 
                 if (!hasAdminRole)
@@ -247,11 +324,22 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
                     _dbContext.UserRoles.Add(new UserRole
                     {
                         UserId = user.Id,
-                        RoleId = adminRole.Id,
+                        RoleId = seedRole.Id,
                         CreatedAt = DateTimeOffset.UtcNow,
                     });
                 }
             }
+        }
+
+        if (adminRole is not null && officialAdminSeed is not null)
+        {
+            var nonOfficialAdminRoles = await _dbContext.UserRoles
+                .Where(userRole =>
+                    userRole.RoleId == adminRole.Id &&
+                    userRole.UserId != officialAdminSeed.Id)
+                .ToListAsync(cancellationToken);
+
+            _dbContext.UserRoles.RemoveRange(nonOfficialAdminRoles);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

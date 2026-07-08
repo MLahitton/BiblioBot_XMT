@@ -72,7 +72,15 @@ public sealed class CreateSaleCommandHandler : IRequestHandler<CreateSaleCommand
         var cart = await _context.Carts
             .Include(cart => cart.CartItems)
             .ThenInclude(item => item.Book)
-            .FirstOrDefaultAsync(cart => cart.SessionId == sessionId, cancellationToken);
+            .Where(cart =>
+                cart.Status == CartStatusCodes.Active &&
+                (
+                    cart.UserId == actorId ||
+                    (cart.SessionId == sessionId && (!cart.UserId.HasValue || cart.UserId == actorId))
+                ))
+            .OrderByDescending(cart => cart.UserId == actorId)
+            .ThenByDescending(cart => cart.UpdatedAt ?? cart.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (cart is null)
         {

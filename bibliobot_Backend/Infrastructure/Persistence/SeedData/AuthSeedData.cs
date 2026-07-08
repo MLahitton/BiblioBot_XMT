@@ -70,10 +70,13 @@ public static class AuthSeedData
     {
         new SeedUser(
             UserSeedId(1),
-            "Admin Bootstrap",
-            "admin.bootstrap@bibliobot.test",
-            "Admin_Bootstrap_123!",
+            "Administrador",
+            "admin@gmail.com",
+            "12345",
             true)
+        {
+            RoleCode = RoleCodes.Admin
+        }
     };
 
     private static Guid RoleSeedId(int number)

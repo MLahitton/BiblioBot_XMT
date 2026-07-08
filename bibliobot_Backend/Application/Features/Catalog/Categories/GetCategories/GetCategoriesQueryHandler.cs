@@ -32,7 +32,12 @@ public sealed class GetCategoriesQueryHandler : IRequestHandler<GetCategoriesQue
                 Id = category.Id,
                 Name = category.Name,
                 IsActive = category.IsActive,
+                TotalBooks = category.BookCategories
+                    .Count(bookCategory =>
+                        bookCategory.Book.IsActive &&
+                        !bookCategory.Book.IsDeleted),
             })
+            .Where(category => request.IncludeInactive || category.TotalBooks > 0)
             .ToListAsync(cancellationToken);
     }
 }
