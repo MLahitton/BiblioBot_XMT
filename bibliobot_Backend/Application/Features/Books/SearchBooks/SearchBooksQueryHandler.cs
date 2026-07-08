@@ -56,6 +56,14 @@ public sealed class SearchBooksQueryHandler : IRequestHandler<SearchBooksQuery, 
                 Isbn = book.Isbn,
                 PublisherName = book.Publisher != null ? book.Publisher.Name : null,
                 Price = book.Price,
+                AverageRating = book.BookReviews.Any(review => review.User.IsActive && !review.User.IsDeleted)
+                    ? book.BookReviews
+                        .Where(review => review.User.IsActive && !review.User.IsDeleted)
+                        .Average(review => review.Rating)
+                    : 0,
+                ReviewCount = book.BookReviews.Count(review => review.User.IsActive && !review.User.IsDeleted),
+                PurchasedCount = book.SaleDetails.Sum(detail => detail.Quantity),
+                FavoriteCount = book.UserFavoriteBooks.Count,
                 ImageUrl = book.ImageUrl,
                 Authors = book.BookAuthors.Select(author => author.Author.FullName).Distinct().ToList(),
                 Categories = book.BookCategories.Select(category => category.Category.Name).Distinct().ToList(),

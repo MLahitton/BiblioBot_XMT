@@ -31,6 +31,12 @@ public sealed class GetBookByIdQueryHandler : IRequestHandler<GetBookByIdQuery, 
                 Language = book.Language,
                 ImageUrl = book.ImageUrl,
                 Price = book.Price,
+                AverageRating = book.BookReviews.Any(review => review.User.IsActive && !review.User.IsDeleted)
+                    ? book.BookReviews
+                        .Where(review => review.User.IsActive && !review.User.IsDeleted)
+                        .Average(review => review.Rating)
+                    : 0,
+                ReviewCount = book.BookReviews.Count(review => review.User.IsActive && !review.User.IsDeleted),
                 Authors = book.BookAuthors.Select(author => author.Author.FullName).Distinct().ToList(),
                 Categories = book.BookCategories.Select(category => category.Category.Name).Distinct().ToList(),
                 TotalStock = book.InventoryStocks.Sum(stock => stock.CurrentStock),

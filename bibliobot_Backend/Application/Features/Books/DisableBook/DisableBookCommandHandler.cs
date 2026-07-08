@@ -19,7 +19,9 @@ public sealed class DisableBookCommandHandler : IRequestHandler<DisableBookComma
     {
         var book = await _context.Books
             .Include(current => current.BookAuthors)
+            .ThenInclude(bookAuthor => bookAuthor.Author)
             .Include(current => current.BookCategories)
+            .ThenInclude(bookCategory => bookCategory.Category)
             .Include(current => current.Publisher)
             .Include(current => current.InventoryStocks)
             .ThenInclude(stock => stock.Branch)

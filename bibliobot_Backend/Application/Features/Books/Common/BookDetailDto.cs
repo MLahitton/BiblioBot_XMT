@@ -11,6 +11,8 @@ public sealed class BookDetailDto
     public string? Language { get; init; }
     public string? ImageUrl { get; init; }
     public decimal Price { get; init; }
+    public double AverageRating { get; init; }
+    public int ReviewCount { get; init; }
     public IReadOnlyCollection<string> Authors { get; init; } = [];
     public IReadOnlyCollection<string> Categories { get; init; } = [];
     public int TotalStock { get; init; }
