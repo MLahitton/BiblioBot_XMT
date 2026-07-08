@@ -6,6 +6,9 @@ export type Book = {
   price: number;
   previousPrice?: number;
   rating: number;
+  reviewCount: number;
+  purchasedCount?: number;
+  favoriteCount?: number;
   image: string;
   badge?: string;
   description: string;
@@ -13,6 +16,7 @@ export type Book = {
   slug: string;
   isbn?: string | null;
   publisher?: string | null;
+  publicationYear?: number | null;
 };
 
 export type BookApiResponse = {
@@ -25,6 +29,10 @@ export type BookApiResponse = {
   language?: string | null;
   imageUrl?: string | null;
   price: number;
+  averageRating?: number;
+  reviewCount?: number;
+  purchasedCount?: number;
+  favoriteCount?: number;
   authors: string[];
   categories: string[];
   totalStock: number;

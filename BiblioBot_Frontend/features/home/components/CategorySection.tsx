@@ -16,7 +16,7 @@ export function CategorySection({ categories, totalBooks }: CategorySectionProps
       </h2>
       <nav className="mt-4 space-y-1" aria-label="Categorías">
         <a
-          href="#destacados"
+          href="/search"
           className="flex items-center gap-3 rounded-xl bg-[#FF6037]/14 px-3 py-2.5 text-sm font-extrabold text-foreground shadow-[0_8px_18px_rgba(255,96,55,0.12)] transition hover:bg-[#FF6037]/22"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-md border border-[#FF6037]/20 bg-accent">

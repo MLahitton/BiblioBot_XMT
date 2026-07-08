@@ -11,4 +11,5 @@ export type CategoryApiResponse = {
   id: string;
   name: string;
   isActive: boolean;
+  totalBooks?: number;
 };

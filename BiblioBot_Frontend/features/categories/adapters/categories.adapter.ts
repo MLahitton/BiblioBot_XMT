@@ -19,12 +19,15 @@ export function mapCategoryApiToCategory(
     description: `Libros de ${category.name}`,
     icon: "/icons/category.svg",
     slug: slug || category.id,
-    totalBooks: 0,
+    totalBooks: category.totalBooks ?? 0,
   };
 }
 
 export function mapCategoriesApiToCategories(
   categories: CategoryApiResponse[],
 ): Category[] {
-  return categories.map(mapCategoryApiToCategory);
+  return categories
+    .filter((category) => category.isActive)
+    .map(mapCategoryApiToCategory)
+    .sort((current, next) => next.totalBooks - current.totalBooks || current.name.localeCompare(next.name));
 }

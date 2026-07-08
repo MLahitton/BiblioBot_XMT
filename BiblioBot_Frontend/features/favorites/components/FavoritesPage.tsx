@@ -8,6 +8,7 @@ import { routes } from "@/constants/routes";
 import { CartAuthError, addBookToCart } from "@/features/cart/services/cart.service";
 import {
   FAVORITES_UPDATED_EVENT,
+  FavoritesAuthError,
   clearFavorites,
   getFavorites,
   removeFavorite,
@@ -26,6 +27,7 @@ function formatPrice(value: number) {
 export function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteBook[]>([]);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +37,26 @@ export function FavoritesPage() {
   );
 
   useEffect(() => {
-    window.setTimeout(() => setFavorites(getFavorites()), 0);
+    getFavorites()
+      .then((nextFavorites) => {
+        setFavorites(nextFavorites);
+        setError(null);
+      })
+      .catch((loadError) => {
+        setFavorites([]);
+        setError(
+          loadError instanceof FavoritesAuthError
+            ? loadError.message
+            : loadError instanceof Error
+              ? loadError.message
+              : "No se pudieron cargar tus favoritos.",
+        );
+      })
+      .finally(() => setIsLoading(false));
 
     const handleFavoritesUpdated = (event: Event) => {
       const nextFavorites = (event as CustomEvent<FavoriteBook[]>).detail;
-      setFavorites(Array.isArray(nextFavorites) ? nextFavorites : getFavorites());
+      setFavorites(Array.isArray(nextFavorites) ? nextFavorites : []);
     };
 
     window.addEventListener(FAVORITES_UPDATED_EVENT, handleFavoritesUpdated);
@@ -49,16 +66,42 @@ export function FavoritesPage() {
     };
   }, []);
 
-  const handleRemove = (bookId: string) => {
-    setFavorites(removeFavorite(bookId));
-    setMessage("Libro eliminado de favoritos.");
+  const handleRemove = async (bookId: string) => {
+    setPendingAction(bookId);
+    setMessage(null);
     setError(null);
+
+    try {
+      setFavorites(await removeFavorite(bookId));
+      setMessage("Libro eliminado de favoritos.");
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "No se pudo eliminar el libro de favoritos.",
+      );
+    } finally {
+      setPendingAction(null);
+    }
   };
 
-  const handleClear = () => {
-    setFavorites(clearFavorites());
-    setMessage("Lista de favoritos vaciada.");
+  const handleClear = async () => {
+    setPendingAction("clear");
+    setMessage(null);
     setError(null);
+
+    try {
+      setFavorites(await clearFavorites());
+      setMessage("Lista de favoritos vaciada.");
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error
+          ? actionError.message
+          : "No se pudo vaciar la lista de favoritos.",
+      );
+    } finally {
+      setPendingAction(null);
+    }
   };
 
   const handleAddToCart = async (favorite: FavoriteBook) => {
@@ -83,7 +126,7 @@ export function FavoritesPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background px-5 pb-16 pt-24 text-foreground sm:px-8 lg:px-12">
+    <main className="min-h-screen bg-background px-5 pb-16 pt-36 text-foreground sm:px-8 md:pt-24 lg:px-12">
       <div className="mx-auto max-w-6xl">
         <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -119,7 +162,13 @@ export function FavoritesPage() {
           </div>
         )}
 
-        {favorites.length === 0 ? (
+        {isLoading ? (
+          <section className="border-y border-border/70 bg-paper/55 px-5 py-16 text-center">
+            <p className="text-sm font-black uppercase tracking-widest text-muted">
+              Cargando favoritos
+            </p>
+          </section>
+        ) : favorites.length === 0 ? (
           <section className="border-y border-border/70 bg-paper/55 px-5 py-16 text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] text-2xl text-accent shadow-[0_10px_24px_rgba(53,30,28,0.08)]">
               <span aria-hidden="true">♡</span>
@@ -188,10 +237,10 @@ export function FavoritesPage() {
                     <button
                       type="button"
                       disabled={pendingAction !== null}
-                      onClick={() => handleRemove(favorite.id)}
+                      onClick={() => void handleRemove(favorite.id)}
                       className="flex h-10 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-transparent px-4 text-[0.72rem] font-black text-foreground transition hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
-                      Quitar
+                      {pendingAction === favorite.id ? "Quitando..." : "Quitar"}
                     </button>
                   </div>
                 </article>
@@ -214,10 +263,11 @@ export function FavoritesPage() {
               </div>
               <button
                 type="button"
-                onClick={handleClear}
+                disabled={pendingAction !== null}
+                onClick={() => void handleClear()}
                 className="mt-5 flex h-11 w-full items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-transparent px-6 text-[0.72rem] font-black text-foreground transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
-                Vaciar favoritos
+                {pendingAction === "clear" ? "Vaciando..." : "Vaciar favoritos"}
               </button>
             </aside>
           </section>

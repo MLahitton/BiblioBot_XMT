@@ -1,7 +1,10 @@
 import { Header } from "@/components/layout/Header";
 import { getFeaturedBooks } from "@/features/books/services/books.service";
 import type { Book } from "@/features/books/types/book.types";
-import { getCategories } from "@/features/categories/services/categories.service";
+import {
+  getCategories,
+  getCategoriesWithVisibleBooks,
+} from "@/features/categories/services/categories.service";
 import type { Category } from "@/features/categories/types/category.types";
 import { BiblioBotChatWidget } from "./BiblioBotChatWidget";
 import { ChatProvider } from "./ChatContext";
@@ -26,10 +29,10 @@ export async function HomePage() {
     <ChatProvider>
       <PageShell>
         <Header />
-        <div className="pt-20">
+        <div className="pt-36 md:pt-20">
           <ParallaxBookExperience
             books={featuredBooks}
-            categories={categories}
+            categories={getCategoriesWithVisibleBooks(categories, featuredBooks)}
             dataError={dataError}
           />
         </div>

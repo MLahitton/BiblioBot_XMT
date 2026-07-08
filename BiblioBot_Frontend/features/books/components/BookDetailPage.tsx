@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -7,6 +7,13 @@ import type { Book } from "../types/book.types";
 import { defaultPriceLocale, priceFormatOptions } from "@/constants/currency";
 import { CartAuthError, addBookToCart } from "@/features/cart/services/cart.service";
 import {
+  BookReviewAuthError,
+  getBookReviews,
+  saveBookReview,
+  type BookReviewsSummary,
+} from "../services/book-reviews.service";
+import {
+  FavoritesAuthError,
   isFavoriteBook,
   toggleFavorite,
 } from "@/features/favorites/services/favorites.service";
@@ -20,6 +27,12 @@ const priceFormatter = new Intl.NumberFormat(
   defaultPriceLocale,
   priceFormatOptions,
 );
+
+const reviewDateFormatter = new Intl.DateTimeFormat("es-CO", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -44,10 +57,72 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
   const [cartError, setCartError] = useState<string | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [isUpdatingFavorite, setIsUpdatingFavorite] = useState(false);
+  const [reviewsSummary, setReviewsSummary] = useState<BookReviewsSummary | null>(null);
+  const [reviewsError, setReviewsError] = useState<string | null>(null);
+  const [reviewMessage, setReviewMessage] = useState<string | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+  const [isSavingReview, setIsSavingReview] = useState(false);
 
   useEffect(() => {
-    window.setTimeout(() => setIsFavorite(isFavoriteBook(book.id)), 0);
+    let isMounted = true;
+
+    isFavoriteBook(book.id)
+      .then((nextIsFavorite) => {
+        if (isMounted) {
+          setIsFavorite(nextIsFavorite);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setIsFavorite(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [book.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const timeoutId = window.setTimeout(() => {
+      setIsLoadingReviews(true);
+      setReviewsError(null);
+      setReviewMessage(null);
+
+      getBookReviews(book.id)
+        .then((summary) => {
+          if (isMounted) {
+            setReviewsSummary(summary);
+          }
+        })
+        .catch((error) => {
+          if (isMounted) {
+            setReviewsError(
+              error instanceof Error
+                ? error.message
+                : "No se pudieron cargar las resenas.",
+            );
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsLoadingReviews(false);
+          }
+        });
+    }, 0);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [book.id]);
+
+  const displayedRating = reviewsSummary?.averageRating ?? book.rating;
+  const displayedReviewCount = reviewsSummary?.reviewCount ?? book.reviewCount;
 
   const handleAddToCart = async () => {
     setIsAddingToCart(true);
@@ -70,20 +145,69 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
     }
   };
 
-  const handleToggleFavorite = () => {
-    const favorites = toggleFavorite(book);
-    const nextIsFavorite = favorites.some((favorite) => favorite.id === book.id);
-    setIsFavorite(nextIsFavorite);
+  const handleToggleFavorite = async () => {
+    setIsUpdatingFavorite(true);
     setCartError(null);
-    setCartMessage(
-      nextIsFavorite
-        ? "Libro agregado a favoritos."
-        : "Libro eliminado de favoritos.",
-    );
+    setCartMessage(null);
+
+    try {
+      const favorites = await toggleFavorite(book);
+      const nextIsFavorite = favorites.some((favorite) => favorite.id === book.id);
+      setIsFavorite(nextIsFavorite);
+      setCartMessage(
+        nextIsFavorite
+          ? "Libro agregado a favoritos."
+          : "Libro eliminado de favoritos.",
+      );
+    } catch (error) {
+      setCartError(
+        error instanceof FavoritesAuthError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "No se pudo actualizar favoritos.",
+      );
+    } finally {
+      setIsUpdatingFavorite(false);
+    }
+  };
+
+  const handleSaveReview = async () => {
+    const comment = reviewComment.trim();
+    setReviewsError(null);
+    setReviewMessage(null);
+
+    if (comment.length < 5) {
+      setReviewsError("La resena debe tener al menos 5 caracteres.");
+      return;
+    }
+
+    setIsSavingReview(true);
+
+    try {
+      const summary = await saveBookReview(book.id, {
+        rating: reviewRating,
+        comment,
+      });
+      setReviewsSummary(summary);
+      setReviewComment("");
+      setReviewRating(5);
+      setReviewMessage("Tu resena se guardo correctamente.");
+    } catch (error) {
+      setReviewsError(
+        error instanceof BookReviewAuthError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "No se pudo guardar la resena.",
+      );
+    } finally {
+      setIsSavingReview(false);
+    }
   };
 
   return (
-    <main className="min-h-screen bg-background px-5 pb-16 pt-24 text-foreground sm:px-8 lg:px-12">
+    <main className="min-h-screen bg-background px-5 pb-16 pt-36 text-foreground sm:px-8 md:pt-24 lg:px-12">
       <div className="mx-auto max-w-6xl">
         <Link
           href="/#destacados"
@@ -137,15 +261,15 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
             <div className="mt-5 flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 shadow-sm">
                 <span className="text-sm font-black text-foreground">
-                  {book.rating.toFixed(1)}
+                  {displayedRating.toFixed(1)}
                 </span>
-                <StarRating rating={book.rating} />
+                <StarRating rating={displayedRating} />
               </div>
               <a
                 href="#resenas"
                 className="text-xs font-bold text-muted underline decoration-border underline-offset-4 transition hover:text-foreground"
               >
-                Leer {book.stock} reseñas
+                Leer {displayedReviewCount} resenas
               </a>
             </div>
 
@@ -202,7 +326,8 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
               <button
                 type="button"
                 aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
-                onClick={handleToggleFavorite}
+                disabled={isUpdatingFavorite}
+                onClick={() => void handleToggleFavorite()}
                 className={`flex h-14 w-full items-center justify-center rounded-full border-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:w-14 ${
                   isFavorite
                     ? "border-accent bg-accent/10 text-accent"
@@ -252,22 +377,128 @@ export function BookDetailPage({ book, relatedBooks }: BookDetailPageProps) {
             )}
 
             <section id="resenas" className="mt-12 border-t border-border/60 pt-8">
-              <h2 className="text-lg font-black text-foreground">
-                Reseñas de lectores
-              </h2>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {["Compra verificada", "Recomendado"].map((label) => (
-                  <article key={label} className="border border-border bg-paper p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-black text-foreground">
+                    Resenas de lectores
+                  </h2>
+                  <p className="mt-1 text-sm font-semibold text-muted">
+                    {displayedReviewCount} opiniones guardadas en la base de datos.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 rounded-full border border-border bg-paper px-3 py-1.5">
+                  <span className="text-sm font-black text-foreground">
+                    {displayedRating.toFixed(1)}
+                  </span>
+                  <StarRating rating={displayedRating} />
+                </div>
+              </div>
+
+              <div className="mt-5 border border-border bg-paper/75 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
                     <p className="text-xs font-black uppercase tracking-widest text-accent">
-                      {label}
+                      Tu resena
                     </p>
-                    <p className="mt-2 text-sm font-semibold leading-6 text-foreground/80">
-                      Una lectura cuidada, clara y muy disfrutable para volver con calma.
+                    <p className="mt-1 text-sm font-semibold text-muted">
+                      Comparte una opinion real sobre este libro.
                     </p>
-                  </article>
-                ))}
+                  </div>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <button
+                        key={rating}
+                        type="button"
+                        onClick={() => setReviewRating(rating)}
+                        className={`h-9 w-9 rounded-full border text-sm font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                          reviewRating >= rating
+                            ? "border-[#d09a3f] bg-[#fff6df] text-[#a9731c]"
+                            : "border-border bg-background text-muted hover:border-[#d09a3f]"
+                        }`}
+                        aria-label={`${rating} estrellas`}
+                      >
+                        {rating}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea
+                  value={reviewComment}
+                  onChange={(event) => setReviewComment(event.target.value)}
+                  maxLength={1000}
+                  rows={4}
+                  placeholder="Escribe que te parecio el libro..."
+                  className="mt-4 w-full resize-none border border-border bg-background px-4 py-3 text-sm font-semibold leading-6 text-foreground outline-none transition placeholder:text-muted/60 focus:border-accent focus:ring-1 focus:ring-accent"
+                />
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-bold text-muted">
+                    {reviewComment.trim().length}/1000 caracteres
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveReview()}
+                    disabled={isSavingReview}
+                    className="h-10 rounded-full bg-foreground px-5 text-xs font-black uppercase tracking-widest text-paper transition hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    {isSavingReview ? "Guardando" : "Guardar resena"}
+                  </button>
+                </div>
+                {(reviewsError || reviewMessage) ? (
+                  <p
+                    className={`mt-3 text-sm font-bold ${
+                      reviewsError ? "text-accent" : "text-[#315f3a]"
+                    }`}
+                  >
+                    {reviewsError ?? reviewMessage}
+                    {reviewsError?.includes("iniciar sesion") ? (
+                      <Link href="/auth/login" className="ml-2 underline underline-offset-4">
+                        Iniciar sesion
+                      </Link>
+                    ) : null}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                {isLoadingReviews ? (
+                  <div className="border border-border bg-paper p-5 text-sm font-bold text-muted">
+                    Cargando resenas...
+                  </div>
+                ) : reviewsSummary?.items.length ? (
+                  reviewsSummary.items.map((review) => (
+                    <article key={review.id} className="border border-border bg-paper p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-widest text-accent">
+                            {review.isVerifiedPurchase ? "Compra verificada" : "Lector registrado"}
+                          </p>
+                          <h3 className="mt-2 text-sm font-black text-foreground">
+                            {review.userFullName}
+                          </h3>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-foreground">
+                            {review.rating.toFixed(1)}
+                          </span>
+                          <StarRating rating={review.rating} />
+                        </div>
+                      </div>
+                      <p className="mt-3 text-sm font-semibold leading-6 text-foreground/80">
+                        {review.comment}
+                      </p>
+                      <p className="mt-3 text-xs font-bold text-muted">
+                        {reviewDateFormatter.format(new Date(review.updatedAt ?? review.createdAt))}
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <div className="border border-border bg-paper p-5 text-sm font-bold text-muted">
+                    Aun no hay resenas para este libro.
+                  </div>
+                )}
               </div>
             </section>
+
           </div>
         </section>
 

@@ -11,6 +11,11 @@ type SearchPageProps = {
   searchParams: Promise<{
     q?: string;
     sort?: string;
+    category?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    minYear?: string;
+    maxYear?: string;
   }>;
 };
 
@@ -51,6 +56,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           books={books}
           query={query}
           sort={sort}
+          filters={{
+            category: params.category ?? "",
+            minPrice: params.minPrice ?? "",
+            maxPrice: params.maxPrice ?? "",
+            minYear: params.minYear ?? "",
+            maxYear: params.maxYear ?? "",
+          }}
           error={dataError}
         />
         <BiblioBotChatWidget />

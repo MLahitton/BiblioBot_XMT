@@ -32,9 +32,12 @@ export function mapBookApiToBook(book: BookApiResponse): Book {
     author,
     category,
     price: book.price,
-    rating: 0,
+    rating: book.averageRating ?? 0,
+    reviewCount: book.reviewCount ?? 0,
+    purchasedCount: book.purchasedCount ?? 0,
+    favoriteCount: book.favoriteCount ?? 0,
     image: book.imageUrl?.trim() || fallbackCover,
-    badge: book.totalStock > 0 ? "Disponible" : undefined,
+    badge: undefined,
     description:
       book.description?.trim() ||
       "Este libro forma parte del catalogo activo de BiblioBot.",
@@ -42,6 +45,7 @@ export function mapBookApiToBook(book: BookApiResponse): Book {
     slug: createBookSlug(book),
     isbn: book.isbn,
     publisher: book.publisherName,
+    publicationYear: book.publicationYear,
   };
 }
 

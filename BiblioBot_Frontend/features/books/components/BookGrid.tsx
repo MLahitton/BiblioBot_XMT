@@ -11,9 +11,9 @@ type BookGridProps = {
 };
 
 const shelfTitles = [
-  "Leyendo ahora",
-  "Siguiente en la repisa",
-  "Favoritos terminados",
+  "Más vendidos",
+  "Recomendados",
+  "Mejor valorados",
 ];
 
 function splitIntoShelves(books: Book[]): Book[][] {
@@ -23,7 +23,7 @@ function splitIntoShelves(books: Book[]): Book[][] {
 }
 
 function getShelfTitle(shelfIndex: number, shelfCount: number): string {
-  if (shelfCount === 1) return "Seleccion recomendada";
+  if (shelfCount === 1) return "Más vendidos y recomendados";
   return shelfTitles[shelfIndex] ?? `Repisa ${shelfIndex + 1}`;
 }
 

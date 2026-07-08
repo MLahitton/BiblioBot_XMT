@@ -82,7 +82,7 @@ export function CategoryCard({
   return (
     <motion.a
       id={category.slug}
-      href={`#${category.slug}`}
+      href={`/search?category=${encodeURIComponent(category.slug)}`}
       className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition ${palette.surface} ${palette.text} ${palette.shadow} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
       initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
       whileInView={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
@@ -102,6 +102,9 @@ export function CategoryCard({
         />
       </span>
       <span className="min-w-0 flex-1 truncate">{category.name}</span>
+      <span className="rounded-md bg-paper/75 px-1.5 py-0.5 text-[0.62rem] font-black text-foreground shadow-sm">
+        {category.totalBooks}
+      </span>
     </motion.a>
   );
 }

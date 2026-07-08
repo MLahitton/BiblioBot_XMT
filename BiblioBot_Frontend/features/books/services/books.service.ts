@@ -8,6 +8,10 @@ import {
 import type { Book } from "../types/book.types";
 import type { BookApiResponse, PagedBooksApiResponse } from "../types/book.types";
 
+function getCommercialScore(book: Book): number {
+  return (book.purchasedCount ?? 0) * 4 + (book.favoriteCount ?? 0) * 2;
+}
+
 export async function getBooks(): Promise<Book[]> {
   const response = await apiGet<PagedBooksApiResponse>(API_ENDPOINTS.books, {
     query: {
@@ -23,6 +27,12 @@ export async function getFeaturedBooks(): Promise<Book[]> {
   const books = await getBooks();
   return books
     .filter((book) => book.stock > 0)
+    .sort((current, next) =>
+      getCommercialScore(next) - getCommercialScore(current) ||
+      next.rating - current.rating ||
+      next.reviewCount - current.reviewCount ||
+      current.title.localeCompare(next.title),
+    )
     .slice(0, 12);
 }
 
