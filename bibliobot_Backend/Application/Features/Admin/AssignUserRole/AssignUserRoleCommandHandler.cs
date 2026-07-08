@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Features.Admin.Common;
 using Application.Features.Admin.GetAdminUserById;
+using Domain.Constants;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,8 @@ namespace Application.Features.Admin.AssignUserRole;
 
 public sealed class AssignUserRoleCommandHandler : IRequestHandler<AssignUserRoleCommand, AdminUserDetailDto?>
 {
+    private const string OfficialAdminEmail = "admin@gmail.com";
+
     private readonly IApplicationDbContext _context;
     private readonly ISender _sender;
 
@@ -51,6 +54,12 @@ public sealed class AssignUserRoleCommandHandler : IRequestHandler<AssignUserRol
         if (user is null)
         {
             return null;
+        }
+
+        if (normalizedRoleCode == RoleCodes.Admin &&
+            !string.Equals(user.Email, OfficialAdminEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Solo la cuenta admin@gmail.com puede tener rol ADMIN.");
         }
 
         var role = await _context.Roles.FirstOrDefaultAsync(

@@ -33,6 +33,7 @@ public sealed class GetAdminUsersQueryHandler : IRequestHandler<GetAdminUsersQue
         {
             var search = request.Search.Trim().ToUpperInvariant();
             query = query.Where(user =>
+                user.Id.ToString().ToUpper().Contains(search) ||
                 user.FullName.ToUpper().Contains(search) ||
                 user.Email.ToUpper().Contains(search));
         }
@@ -59,8 +60,11 @@ public sealed class GetAdminUsersQueryHandler : IRequestHandler<GetAdminUsersQue
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email,
+                Phone = user.Phone,
+                DocumentNumber = user.DocumentNumber,
                 IsActive = user.IsActive,
                 CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt,
                 Roles = user.UserRoles
                     .Select(userRole => userRole.Role.Code)
                     .Distinct()

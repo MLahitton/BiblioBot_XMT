@@ -3,6 +3,7 @@ using System.Net.Mail;
 using Application.Common.Interfaces;
 using Application.Features.Admin.Common;
 using Application.Features.Admin.GetAdminUserById;
+using Domain.Constants;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,8 @@ public sealed class CreateAdminUserCommandHandler : IRequestHandler<CreateAdminU
         var fullName = request.FullName?.Trim() ?? string.Empty;
         var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
         var password = request.Password ?? string.Empty;
+        var phone = request.Phone?.Trim();
+        var documentNumber = request.DocumentNumber?.Trim();
 
         if (string.IsNullOrWhiteSpace(fullName) || fullName.Length > 160)
         {
@@ -56,6 +59,16 @@ public sealed class CreateAdminUserCommandHandler : IRequestHandler<CreateAdminU
         if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
         {
             throw new ArgumentException("La contraseña debe tener al menos 8 caracteres.");
+        }
+
+        if (phone is not null && phone.Length > 40)
+        {
+            throw new ArgumentException("El telefono debe tener maximo 40 caracteres.");
+        }
+
+        if (documentNumber is not null && documentNumber.Length > 50)
+        {
+            throw new ArgumentException("El documento debe tener maximo 50 caracteres.");
         }
 
         var actorIsActive = await _context.Users.AnyAsync(
@@ -107,6 +120,11 @@ public sealed class CreateAdminUserCommandHandler : IRequestHandler<CreateAdminU
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+        if (distinctRoleCodes.Contains(RoleCodes.Admin))
+        {
+            throw new ArgumentException("Solo la cuenta admin@gmail.com puede tener rol ADMIN.");
+        }
+
         var roles = await _context.Roles
             .Where(role => distinctRoleCodes.Contains(role.Code))
             .OrderBy(role => role.Code)
@@ -128,6 +146,8 @@ public sealed class CreateAdminUserCommandHandler : IRequestHandler<CreateAdminU
             FullName = fullName,
             Email = email,
             PasswordHash = string.Empty,
+            Phone = string.IsNullOrWhiteSpace(phone) ? null : phone,
+            DocumentNumber = string.IsNullOrWhiteSpace(documentNumber) ? null : documentNumber,
             IsActive = true,
         };
 
