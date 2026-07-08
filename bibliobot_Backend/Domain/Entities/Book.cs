@@ -21,4 +21,6 @@ public class Book : SoftDeletableEntity
     public ICollection<CartItem> CartItems { get; set; } = [];
     public ICollection<SaleDetail> SaleDetails { get; set; } = [];
     public ICollection<InternalRequestItem> InternalRequestItems { get; set; } = [];
+    public ICollection<UserFavoriteBook> UserFavoriteBooks { get; set; } = [];
+    public ICollection<BookReview> BookReviews { get; set; } = [];
 }

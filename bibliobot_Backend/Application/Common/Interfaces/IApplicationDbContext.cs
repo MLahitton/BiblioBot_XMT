@@ -13,6 +13,7 @@ public interface IApplicationDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
 
     DbSet<Book> Books { get; }
+    DbSet<BookReview> BookReviews { get; }
     DbSet<Author> Authors { get; }
     DbSet<BookAuthor> BookAuthors { get; }
     DbSet<Category> Categories { get; }
@@ -26,6 +27,7 @@ public interface IApplicationDbContext
 
     DbSet<Cart> Carts { get; }
     DbSet<CartItem> CartItems { get; }
+    DbSet<UserFavoriteBook> UserFavoriteBooks { get; }
 
     DbSet<SaleStatus> SaleStatuses { get; }
     DbSet<SaleOrigin> SaleOrigins { get; }

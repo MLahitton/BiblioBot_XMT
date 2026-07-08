@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(BiblioBotDbContext))]
-    partial class BiblioBotDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260708112542_AddUserFavoriteBooks")]
+    partial class AddUserFavoriteBooks
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -167,58 +170,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("CategoryId");
 
                     b.ToTable("book_categories", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.BookReview", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("BookId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("book_id");
-
-                    b.Property<string>("Comment")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("comment");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("IsVerifiedPurchase")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_verified_purchase");
-
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer")
-                        .HasColumnName("rating");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BookId")
-                        .HasDatabaseName("ix_book_reviews_book_id");
-
-                    b.HasIndex("UserId", "BookId")
-                        .IsUnique()
-                        .HasDatabaseName("uq_book_reviews_user_id_book_id");
-
-                    b.ToTable("book_reviews", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_book_reviews_rating_range", "rating >= 1 AND rating <= 5");
-                        });
                 });
 
             modelBuilder.Entity("Domain.Entities.Branch", b =>
@@ -1392,25 +1343,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("Domain.Entities.BookReview", b =>
-                {
-                    b.HasOne("Domain.Entities.Book", "Book")
-                        .WithMany("BookReviews")
-                        .HasForeignKey("BookId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.User", "User")
-                        .WithMany("BookReviews")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Book");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("Domain.Entities.Cart", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -1747,8 +1679,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("BookCategories");
 
-                    b.Navigation("BookReviews");
-
                     b.Navigation("CartItems");
 
                     b.Navigation("InternalRequestItems");
@@ -1849,8 +1779,6 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.User", b =>
                 {
                     b.Navigation("ActorSales");
-
-                    b.Navigation("BookReviews");
 
                     b.Navigation("Carts");
 

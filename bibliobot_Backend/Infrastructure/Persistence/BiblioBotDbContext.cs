@@ -18,6 +18,7 @@ public class BiblioBotDbContext : DbContext, IApplicationDbContext
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
     public DbSet<Book> Books { get; set; } = null!;
+    public DbSet<BookReview> BookReviews { get; set; } = null!;
     public DbSet<Author> Authors { get; set; } = null!;
     public DbSet<BookAuthor> BookAuthors { get; set; } = null!;
     public DbSet<Category> Categories { get; set; } = null!;
@@ -31,6 +32,7 @@ public class BiblioBotDbContext : DbContext, IApplicationDbContext
 
     public DbSet<Cart> Carts { get; set; } = null!;
     public DbSet<CartItem> CartItems { get; set; } = null!;
+    public DbSet<UserFavoriteBook> UserFavoriteBooks { get; set; } = null!;
 
     public DbSet<SaleStatus> SaleStatuses { get; set; } = null!;
     public DbSet<SaleOrigin> SaleOrigins { get; set; } = null!;
