@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from app.schemas.chat_contract import ChatLink
+from app.services.frontend_action_service import FrontendActionService
 
 
 class AuthRequiredService:
@@ -18,6 +19,9 @@ class AuthRequiredService:
         "inventory_query",
     }
     GUEST_PUBLIC_PERMISSIONS = {"chat.message", "books.read", "books.search"}
+
+    def __init__(self, frontend_action_service: FrontendActionService | None = None):
+        self.frontend_action_service = frontend_action_service or FrontendActionService()
 
     def is_guest(self, roles: list[str], user_id: UUID | str | None) -> bool:
         normalized_roles = {role.strip().upper() for role in roles if role.strip()}
@@ -38,7 +42,4 @@ class AuthRequiredService:
         return intent in self.AUTHENTICATED_INTENTS
 
     def build_auth_links(self) -> list[ChatLink]:
-        return [
-            ChatLink(label="Iniciar sesion", url="/login", type="AUTH_LOGIN"),
-            ChatLink(label="Crear cuenta", url="/register", type="AUTH_REGISTER"),
-        ]
+        return self.frontend_action_service.build_login_links()

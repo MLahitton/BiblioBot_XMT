@@ -143,7 +143,7 @@ def test_book_detail_found_returns_product_navigation_and_link():
     assert response.state == "INTENT_DETECTED"
     assert response.uiAction == "NAVIGATE_TO_PRODUCT"
     assert response.context.selectedBookId == "book-003"
-    assert response.links[0].url == "/libros/book-003"
+    assert response.links[0].url == "/books/python-practico-book-003"
     assert response.links[0].type == "BOOK_DETAIL"
 
 
@@ -344,7 +344,8 @@ def test_final_safety_blocks_invalid_ui_action_and_dangerous_links():
             "ui_action": "RUN_SCRIPT",
             "links": [
                 ChatLink(label="bad", url="javascript:alert(1)", type="BOOK_DETAIL"),
-                ChatLink(label="good", url="/libros/book-001", type="BOOK_DETAIL"),
+                ChatLink(label="backend", url="/api/libros/book-001", type="BOOK_DETAIL"),
+                ChatLink(label="good", url="/books/python-practico-book-001", type="BOOK_DETAIL"),
             ],
             "context": {},
             "metadata": {"secret": "blocked", "query": "python"},
@@ -355,7 +356,7 @@ def test_final_safety_blocks_invalid_ui_action_and_dangerous_links():
 
     assert state["ui_action"] == "NONE"
     assert len(state["links"]) == 1
-    assert state["links"][0].url == "/libros/book-001"
+    assert state["links"][0].url == "/books/python-practico-book-001"
     assert "secret" not in state["metadata"]
 
 

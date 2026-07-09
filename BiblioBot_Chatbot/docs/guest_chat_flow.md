@@ -44,8 +44,8 @@ Si un invitado intenta una accion protegida, el grafo responde `NEEDS_CLARIFICAT
 
 La respuesta incluye links seguros:
 
-- `/login` con type `AUTH_LOGIN`
-- `/register` con type `AUTH_REGISTER`
+- `/auth/login` con type `AUTH_LOGIN`
+- `/auth/register` con type `AUTH_REGISTER`
 
 `uiAction` se mantiene en `NONE` porque no existe una accion visual nueva para login o registro en esta fase.
 
@@ -53,4 +53,4 @@ La respuesta incluye links seguros:
 
 FastAPI solo devuelve texto, links y metadata. React decide si navega a login o registro y mantiene el chat abierto.
 
-FastAPI no debe hacer HTTP real hacia ASP.NET Core, no debe escribir en base de datos, no debe ejecutar mutaciones reales y no debe implementar sugerencias iniciales completas en esta fase.
+FastAPI no debe hacer HTTP real hacia ASP.NET Core, no debe escribir en base de datos ni debe ejecutar mutaciones reales.

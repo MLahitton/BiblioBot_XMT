@@ -33,7 +33,8 @@ Las tools sensibles solo devuelven `PENDING_CONFIRMATION`, `requiresConfirmation
 
 FastAPI no navega ni cierra el chat.
 Para busquedas de catalogo puede devolver `NAVIGATE_TO_CATALOG` con `context.metadata.query` y `context.metadata.filters`.
-Para detalle de libro puede devolver `NAVIGATE_TO_PRODUCT`, `selectedBookId` y un link interno controlado `/libros/{bookId}`.
+Desde Fase 12, las busquedas incluyen metadata visual hacia `/search`.
+Para detalle de libro puede devolver `NAVIGATE_TO_PRODUCT`, `selectedBookId` y un link interno controlado `/books/{slug}`.
 React interpreta estas senales y decide si navega internamente manteniendo abierto el chat.
 
 ## Servicios usados

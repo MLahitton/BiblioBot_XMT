@@ -65,7 +65,7 @@ def assert_auth_required(body, original_intent: str):
     assert body["context"]["nextAction"] == "AUTH_REQUIRED"
     assert body["uiAction"] == "NONE"
     assert {link["type"] for link in body["links"]} == {"AUTH_LOGIN", "AUTH_REGISTER"}
-    assert {link["url"] for link in body["links"]} == {"/login", "/register"}
+    assert {link["url"] for link in body["links"]} == {"/auth/login", "/auth/register"}
     assert body["context"]["requiresConfirmation"] is False
     assert body["context"]["metadata"]["originalIntent"] == original_intent
     assert body["context"]["metadata"]["authRequired"] is True
@@ -120,7 +120,7 @@ def test_guest_can_view_book_detail_and_product_link():
     assert body["context"]["intent"] == "book_detail"
     assert body["uiAction"] == "NAVIGATE_TO_PRODUCT"
     assert body["context"]["selectedBookId"] == "book-003"
-    assert body["links"][0]["url"] == "/libros/book-003"
+    assert body["links"][0]["url"] == "/books/python-practico-book-003"
 
 
 def test_guest_purchase_intent_returns_auth_required():

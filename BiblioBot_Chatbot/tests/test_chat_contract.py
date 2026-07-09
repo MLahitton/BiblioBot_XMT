@@ -209,7 +209,8 @@ def test_chat_process_accepts_dotnet_contract():
     body = response.json()
     assert set(body.keys()) == {"response", "state", "links", "uiAction", "context"}
     assert body["state"] == "INTENT_DETECTED"
-    assert body["links"] == []
+    assert body["links"][0]["url"].startswith("/search")
+    assert body["links"][0]["type"] == "CATALOG_SEARCH"
     assert body["uiAction"] == "NAVIGATE_TO_CATALOG"
     assert body["context"]["intent"] == "catalog_search"
     assert body["context"]["requiresConfirmation"] is False
@@ -583,7 +584,7 @@ def test_invoice_query_wins_over_catalog_terms():
     assert body["context"]["intent"] == "invoice_query"
     assert body["context"]["nextAction"] == "INVOICE_READY"
     assert body["uiAction"] == "SHOW_INVOICE"
-    assert body["links"][0]["type"] == "invoice"
+    assert body["links"] == []
     assert body["context"]["metadata"]["invoice"]["id"] == "FAC-0001"
 
 

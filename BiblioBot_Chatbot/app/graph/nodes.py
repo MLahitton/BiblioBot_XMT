@@ -6,6 +6,7 @@ from typing import Any
 from app.schemas.chat_contract import ChatLink, ChatProcessRequest, ChatState, UiActionType
 from app.services.auth_required_service import AuthRequiredService
 from app.services.confirmation_service import ConfirmationService
+from app.services.frontend_action_service import FrontendActionService
 from app.services.llm_assistant_service import LlmAssistantService
 from app.services.permission_service import PermissionService
 from app.tools.bibliobot_tools import BiblioBotToolService
@@ -27,6 +28,7 @@ from app.graph.state import ChatGraphState
 
 SENSITIVE_INTENTS = {"purchase_intent", "inventory_entry", "transfer_request", "purchase_request"}
 AUTH_REQUIRED_SERVICE = AuthRequiredService()
+FRONTEND_ACTION_SERVICE = FrontendActionService()
 ALLOWED_INTENTS = [
     "catalog_search",
     "book_detail",
@@ -307,6 +309,10 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
                 f"{_describe_allowed_capabilities(state.get('permissions', []))}.",
                 "state": ChatState.IDLE.value,
                 "next_step": "WAITING_USER_MESSAGE",
+                "metadata": {
+                    **state.get("metadata", {}),
+                    "suggestions": FRONTEND_ACTION_SERVICE.get_initial_suggestions(),
+                },
             }
 
         return {
@@ -314,6 +320,10 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
             "response": "Puedo ayudarte con catalogo, disponibilidad, compras, facturas e inventario. Que necesitas hacer?",
             "state": ChatState.NEEDS_CLARIFICATION.value,
             "next_step": "ASK_CLARIFICATION",
+            "metadata": {
+                **state.get("metadata", {}),
+                "suggestions": FRONTEND_ACTION_SERVICE.get_initial_suggestions(),
+            },
         }
 
     return tool_dispatch_node
@@ -384,6 +394,7 @@ def _catalog_result_state(state: ChatGraphState, query: str | None, result: dict
     books = result.get("books", []) if result.get("status") == "MOCK_ONLY" else []
     titles = [book["title"] for book in books[:3]]
     filters = _catalog_filters(query)
+    catalog_link = FRONTEND_ACTION_SERVICE.build_catalog_link(query, filters)
     response = (
         "Encontre estos libros en el catalogo simulado: " + "; ".join(titles) + "."
         if titles
@@ -394,12 +405,12 @@ def _catalog_result_state(state: ChatGraphState, query: str | None, result: dict
         "response": response,
         "state": ChatState.INTENT_DETECTED.value,
         "ui_action": UiActionType.NAVIGATE_TO_CATALOG.value,
+        "links": [catalog_link] if catalog_link else [],
         "next_step": "SEARCH_BOOKS_PENDING",
         "tool_result": result,
         "metadata": {
             **state.get("metadata", {}),
-            "query": query,
-            "filters": filters,
+            **FRONTEND_ACTION_SERVICE.build_catalog_metadata(query, filters),
             "resultCount": len(books),
             "books": _summarize_books(books),
         },
@@ -410,7 +421,8 @@ def _book_detail_result_state(state: ChatGraphState, result: dict[str, Any]) -> 
     book = result.get("book")
     if not book:
         return _asking_details(state, "No encontre ese libro en los datos simulados. Indica otro titulo o identificador.", "ASK_BOOK_IDENTIFIER")
-    link = ChatLink(label="Ver detalle del libro", url=f"/libros/{book['id']}", type="BOOK_DETAIL")
+    link = FRONTEND_ACTION_SERVICE.build_book_detail_link(book["id"], book["title"])
+    visual_metadata = FRONTEND_ACTION_SERVICE.build_book_metadata(book["id"], book["title"])
     return {
         **state,
         "response": f"{book['title']} de {book['author']}. Genero: {book['genre']}. Precio simulado: {book['price']}.",
@@ -420,7 +432,7 @@ def _book_detail_result_state(state: ChatGraphState, result: dict[str, Any]) -> 
         "next_step": "BOOK_DETAIL_READY",
         "tool_result": result,
         "context": {**state.get("context", {}), "selectedBookId": book["id"]},
-        "metadata": {**state.get("metadata", {}), "book": _summarize_book(book), "bookTitle": book["title"]},
+        "metadata": {**state.get("metadata", {}), "book": _summarize_book(book), **visual_metadata},
     }
 
 
@@ -454,11 +466,16 @@ def _invoice_result_state(state: ChatGraphState, invoice_id: str, result: dict[s
         "response": f"Factura simulada {invoice['id']} encontrada. Total: {invoice['total']}. Estado: {invoice['status']}.",
         "state": ChatState.INTENT_DETECTED.value,
         "ui_action": UiActionType.SHOW_INVOICE.value,
-        "links": [ChatLink(label=f"Ver factura {invoice['id']}", url=f"/facturas/{invoice['id']}", type="invoice")],
+        "links": [],
         "next_step": "INVOICE_READY",
         "tool_result": result,
         "context": {**state.get("context", {}), "invoiceNumber": invoice["id"], "saleId": invoice.get("saleId")},
-        "metadata": {**state.get("metadata", {}), "invoice": invoice},
+        "metadata": {
+            **state.get("metadata", {}),
+            "invoice": invoice,
+            "invoiceNumber": invoice["id"],
+            "saleId": invoice.get("saleId"),
+        },
     }
 
 
@@ -870,10 +887,7 @@ def _safe_links(links: list[Any]) -> list[ChatLink]:
 
 
 def _is_safe_internal_link(url: str) -> bool:
-    if not url.startswith("/"):
-        return False
-    lowered = url.lower()
-    return not any(danger in lowered for danger in ("javascript:", "<script", "data:", "//"))
+    return FRONTEND_ACTION_SERVICE.sanitize_internal_path(url) is not None
 
 
 def _safe_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
