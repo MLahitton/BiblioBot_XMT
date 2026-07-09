@@ -218,6 +218,19 @@ def test_add_or_update_cart_item_with_permission_returns_pending_confirmation():
     assert "DONE" not in result.values()
 
 
+def test_add_or_update_cart_item_accepts_sales_create_for_purchase_intent():
+    service = BiblioBotToolService()
+
+    result = service.add_or_update_cart_item(
+        AddOrUpdateCartItemInput(session_id="session-1", book_id="book-001", quantity=1),
+        context_with("sales.create"),
+    )
+
+    assert result["status"] == "PENDING_CONFIRMATION"
+    assert result["requiresConfirmation"] is True
+    assert result["pendingAction"]["status"] == "PENDING_CONFIRMATION"
+
+
 def test_create_sale_from_cart_with_permission_does_not_create_real_sale():
     service = BiblioBotToolService()
 

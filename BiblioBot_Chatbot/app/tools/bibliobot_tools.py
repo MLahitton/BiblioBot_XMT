@@ -84,8 +84,8 @@ class BiblioBotToolService:
         if auth_required:
             return auth_required
 
-        if not self._has_permission(context, "cart.manage"):
-            return self._permission_denied(["cart.manage"])
+        if not self._has_any_permission(context, ["cart.manage", "sales.create"]):
+            return self._permission_denied(["cart.manage", "sales.create"])
 
         return self._pending_action(
             context=context,

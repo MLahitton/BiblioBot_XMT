@@ -246,7 +246,13 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
                 ),
                 context,
             )
-            return _pending_confirmation_state(state, result, f"Preparar compra de {quantity} unidad(es) de {book['title']}")
+            return _pending_confirmation_state(
+                state,
+                _enrich_purchase_pending_result(result, book, quantity),
+                f"Preparar compra de {quantity} unidad(es) de {book['title']}",
+                selected_book_id=book["id"],
+                metadata_extra={"bookTitle": book["title"], "quantity": quantity},
+            )
 
         if intent == "inventory_entry":
             details = _extract_sensitive_details(message, tool_service, require_branch=True)
@@ -479,9 +485,18 @@ def _sales_result_state(state: ChatGraphState, result: dict[str, Any]) -> ChatGr
     }
 
 
-def _pending_confirmation_state(state: ChatGraphState, result: dict[str, Any], summary: str) -> ChatGraphState:
+def _pending_confirmation_state(
+    state: ChatGraphState,
+    result: dict[str, Any],
+    summary: str,
+    selected_book_id: str | None = None,
+    metadata_extra: dict[str, Any] | None = None,
+) -> ChatGraphState:
     pending_action = result.get("pendingAction")
     action_ref = result.get("actionRef")
+    context = dict(state.get("context", {}))
+    if selected_book_id:
+        context["selectedBookId"] = selected_book_id
     return {
         **state,
         "response": f"{summary}. Confirma explicitamente para continuar. En esta fase no se ejecuta ninguna accion real.",
@@ -491,7 +506,8 @@ def _pending_confirmation_state(state: ChatGraphState, result: dict[str, Any], s
         "action_ref": action_ref,
         "pending_action": pending_action,
         "tool_result": result,
-        "metadata": {**state.get("metadata", {}), "pendingAction": pending_action},
+        "context": context,
+        "metadata": {**state.get("metadata", {}), **(metadata_extra or {}), "pendingAction": pending_action},
     }
 
 
@@ -605,6 +621,8 @@ def _detect_intent(normalized: str) -> str:
         ):
             return "catalog_search"
         return "book_detail"
+    if re.search(r"\bx\s*-?\d+\b", normalized):
+        return "purchase_intent"
 
     priority_rules = [
         ("purchase_request", ("solicitud de compra", "pedir proveedor", "comprar inventario")),
@@ -612,7 +630,19 @@ def _detect_intent(normalized: str) -> str:
         ("transfer_request", ("traslado", "mover sede", "transferir")),
         ("inventory_entry", ("inventario", "entrada", "registrar entrada")),
         ("stock_check", ("stock", "disponible", "disponibilidad", "existencias")),
-        ("purchase_intent", ("comprar", "quiero llevar", "agregar al carrito", "anadir al carrito")),
+        (
+            "purchase_intent",
+            (
+                "comprar",
+                "quiero llevar",
+                "agrega",
+                "agregar",
+                "agregar al carrito",
+                "anade",
+                "anadir",
+                "anadir al carrito",
+            ),
+        ),
         ("book_detail", ("detalle", "informacion del libro", "ver libro", "muestrame")),
         ("catalog_search", ("buscar", "catalogo", "libro", "libros", "tienen", "recomienda", "recomiendame", "recomendame")),
         ("general_help", ("hola", "ayuda", "que puedes hacer")),
@@ -660,11 +690,17 @@ def _extract_invoice_id(message: str) -> str | None:
 
 
 def _extract_quantity(message: str) -> int | None:
-    match = re.search(r"\b(\d+)\b", message)
-    if match:
-        return int(match.group(1))
-    quantity_words = {"un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5}
     normalized = _normalize(message)
+    multiplier_match = re.search(r"\bx\s*(-?\d+)\b", normalized)
+    if multiplier_match:
+        quantity = int(multiplier_match.group(1))
+        return quantity if quantity > 0 else None
+
+    match = re.search(r"(?<![\w-])(-?\d+)\b", normalized)
+    if match:
+        quantity = int(match.group(1))
+        return quantity if quantity > 0 else None
+    quantity_words = {"un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5}
     for word, quantity in quantity_words.items():
         if re.search(rf"\b{word}\b", normalized):
             return quantity
@@ -677,6 +713,26 @@ def _find_book_from_message(message: str, tool_service: BiblioBotToolService) ->
         if _normalize(book["id"]) in normalized or _normalize(book["title"]) in normalized:
             return tool_service.mock_client.get_book_detail(book["id"])
     return None
+
+
+def _enrich_purchase_pending_result(result: dict[str, Any], book: dict, quantity: int) -> dict[str, Any]:
+    pending_action = result.get("pendingAction")
+    if not isinstance(pending_action, dict):
+        return result
+
+    details = dict(pending_action.get("details") or {})
+    details.update(
+        {
+            "bookId": book["id"],
+            "bookTitle": book["title"],
+            "quantity": quantity,
+        }
+    )
+    enriched_pending_action = {**pending_action, "details": details}
+    enriched_pending_action["bookId"] = book["id"]
+    enriched_pending_action["bookTitle"] = book["title"]
+    enriched_pending_action["quantity"] = quantity
+    return {**result, "pendingAction": enriched_pending_action}
 
 
 def _extract_sensitive_details(

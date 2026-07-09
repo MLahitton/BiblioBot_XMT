@@ -178,6 +178,85 @@ def test_sensitive_purchase_with_permission_needs_details_or_confirmation():
     assert ready.context.metadata["pendingAction"]["status"] == "PENDING_CONFIRMATION"
 
 
+def test_purchase_intent_extracts_quantity_and_book_for_confirmation():
+    response = process("Quiero comprar 2 Python Practico", permissions=["chat.message", "cart.manage"])
+    pending_action = response.context.metadata["pendingAction"]
+
+    assert response.state == "WAITING_CONFIRMATION"
+    assert response.state not in {"DONE", "EXECUTING_ACTION"}
+    assert response.context.intent == "purchase_intent"
+    assert response.context.requiresConfirmation is True
+    assert response.context.actionRef.startswith("mock-action-")
+    assert response.context.selectedBookId == "book-003"
+    assert response.context.nextAction == "AWAIT_EXPLICIT_CONFIRMATION"
+    assert response.uiAction == "NONE"
+    assert pending_action["status"] == "PENDING_CONFIRMATION"
+    assert pending_action["quantity"] == 2
+    assert pending_action["bookTitle"] == "Python Practico"
+    assert pending_action["details"]["bookId"] == "book-003"
+    assert pending_action["details"]["quantity"] == 2
+    assert pending_action["details"]["bookTitle"] == "Python Practico"
+    assert response.context.metadata["bookTitle"] == "Python Practico"
+    assert response.context.metadata["quantity"] == 2
+    assert "invoice" not in response.context.metadata
+
+
+def test_purchase_intent_extracts_supported_buy_phrases():
+    messages = [
+        "Comprar 1 Python Practico",
+        "Agrega 2 Python Practico al carrito",
+        "Quiero llevar 3 Python Practico",
+        "Añade 1 Python Practico",
+        "Añadir 1 Python Practico al carrito",
+        "Quiero Python Practico x2",
+    ]
+
+    for message in messages:
+        response = process(message, permissions=["chat.message", "cart.manage"])
+
+        assert response.state == "WAITING_CONFIRMATION"
+        assert response.context.metadata["pendingAction"]["status"] == "PENDING_CONFIRMATION"
+        assert response.context.selectedBookId == "book-003"
+        assert response.state not in {"DONE", "EXECUTING_ACTION"}
+
+
+def test_purchase_intent_with_sales_create_permission_prepares_confirmation():
+    response = process("Quiero comprar 2 Python Practico", permissions=["chat.message", "sales.create"])
+
+    assert response.state == "WAITING_CONFIRMATION"
+    assert response.context.requiresConfirmation is True
+    assert response.context.metadata["pendingAction"]["status"] == "PENDING_CONFIRMATION"
+
+
+def test_purchase_intent_missing_quantity_or_unknown_book_keeps_asking_details():
+    messages = [
+        "Quiero comprar 2",
+        "Quiero comprar Python Practico",
+        "Quiero comprar 0 Python Practico",
+        "Quiero comprar -1 Python Practico",
+        "Quiero Python Practico x0",
+        "Quiero Python Practico x-1",
+        "Quiero comprar 2 El Hobbit",
+    ]
+
+    for message in messages:
+        response = process(message, permissions=["chat.message", "cart.manage"])
+
+        assert response.state == "ASKING_DETAILS"
+        assert response.context.nextAction == "ASK_BOOK_AND_QUANTITY"
+        assert response.context.requiresConfirmation is True
+        assert response.context.actionRef is None
+        assert response.context.metadata.get("pendingAction") is None
+
+
+def test_purchase_intent_does_not_confuse_book_id_suffix_with_quantity():
+    response = process("Quiero comprar Python Practico book-003", permissions=["chat.message", "cart.manage"])
+
+    assert response.state == "ASKING_DETAILS"
+    assert response.context.nextAction == "ASK_BOOK_AND_QUANTITY"
+    assert response.context.metadata.get("pendingAction") is None
+
+
 def test_sensitive_internal_actions_require_confirmation_and_never_done():
     inventory = process(
         "registrar entrada de 3 Python Practico en sede norte",
