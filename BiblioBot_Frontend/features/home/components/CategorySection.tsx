@@ -1,37 +1,52 @@
+import Image from "next/image";
 import type { Category } from "@/features/categories/types/category.types";
 import { CategoryCard } from "@/features/categories/components/CategoryCard";
 import { landingCopy } from "../data/landing-copy.data";
-import { ScrollReveal } from "./ScrollReveal";
 
 type CategorySectionProps = {
   categories: Category[];
+  totalBooks: number;
 };
 
-export function CategorySection({ categories }: CategorySectionProps) {
+export function CategorySection({ categories, totalBooks }: CategorySectionProps) {
   return (
-    <section id="categorias" className="px-6 py-[72px]">
-      <div className="mx-auto max-w-6xl">
-        <ScrollReveal className="max-w-2xl">
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-accent">
-            {landingCopy.categories.eyebrow}
-          </p>
-          <h2 className="mt-3 text-3xl font-semibold leading-tight text-foreground sm:text-4xl">
-            {landingCopy.categories.title}
-          </h2>
-          <p className="mt-3 text-muted">
-            {landingCopy.categories.description}
-          </p>
-        </ScrollReveal>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {categories.map((category, index) => (
+    <aside id="categorias" className="lg:sticky lg:top-24 lg:h-fit">
+      <h2 className="text-lg font-extrabold text-foreground">
+        {landingCopy.categories.title}
+      </h2>
+      <nav className="mt-4 space-y-1" aria-label="Categorías">
+        <a
+          href="/search"
+          className="flex items-center gap-3 rounded-xl bg-[#FF6037]/14 px-3 py-2.5 text-sm font-extrabold text-foreground shadow-[0_8px_18px_rgba(255,96,55,0.12)] transition hover:bg-[#FF6037]/22"
+        >
+          <span className="flex h-6 w-6 items-center justify-center rounded-md border border-[#FF6037]/20 bg-accent">
+            <Image
+              src="/icons/category.svg"
+              alt=""
+              width={14}
+              height={14}
+              className="invert"
+            />
+          </span>
+          <span className="flex-1">Todos los libros</span>
+          <span className="rounded-md bg-accent px-1.5 py-0.5 text-[0.62rem] font-black text-paper">
+            {totalBooks}
+          </span>
+        </a>
+        {categories.length > 0 ? (
+          categories.slice(0, 6).map((category, index) => (
             <CategoryCard
               key={category.id}
               category={category}
-              revealDelay={index * 0.08}
+              revealDelay={index * 0.04}
             />
-          ))}
-        </div>
-      </div>
-    </section>
+          ))
+        ) : (
+          <p className="px-3 py-2 text-xs font-bold text-muted">
+            No hay categorias disponibles.
+          </p>
+        )}
+      </nav>
+    </aside>
   );
 }

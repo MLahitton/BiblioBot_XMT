@@ -24,27 +24,27 @@ export function FloatingBook({ className, style }: FloatingBookProps) {
         animate={
           shouldReduceMotion
             ? { translateY: 0, rotateZ: 0 }
-            : { translateY: [0, -14, 0], rotateZ: [-1.5, 1, -1.5] }
+            : { translateY: [0, -12, 0], rotateZ: [-1, 1.2, -1] }
         }
         transition={{
-          duration: 6.8,
+          duration: 7.2,
           ease: "easeInOut",
           repeat: Infinity,
         }}
       >
-        <div className="absolute inset-3 rounded-full bg-accent/20 blur-3xl sm:inset-6" />
-        <div className="absolute -right-6 top-10 h-32 w-32 rounded-full border border-paper/15 bg-white/[0.04] backdrop-blur sm:-right-8 sm:h-40 sm:w-40" />
-        <div className="absolute bottom-14 left-0 h-24 w-24 rounded-full border border-accent/20 bg-accent/10 blur-sm sm:h-28 sm:w-28" />
-        <div className="absolute bottom-2 left-1/2 h-20 w-[78%] -translate-x-1/2 rounded-full bg-black/35 blur-2xl sm:h-24" />
-        <div className="relative h-full w-full drop-shadow-[0_38px_55px_rgba(0,0,0,0.42)]">
+        <div className="absolute inset-0 rounded-[2rem] bg-[radial-gradient(circle_at_45%_28%,rgba(227,192,113,0.32),transparent_36%),radial-gradient(circle_at_60%_72%,rgba(239,226,200,0.16),transparent_34%)] blur-2xl" />
+        <div className="absolute bottom-4 left-1/2 h-24 w-[82%] -translate-x-1/2 rounded-full bg-black/45 blur-2xl" />
+        <div className="absolute left-[11%] top-[9%] h-[78%] w-[13%] rounded-l-xl bg-[linear-gradient(90deg,rgba(239,226,200,0.18),rgba(239,226,200,0.03))] shadow-[inset_-10px_0_18px_rgba(0,0,0,0.22)]" />
+        <div className="relative h-full w-full rounded-[1.8rem] border border-paper/12 bg-[linear-gradient(145deg,rgba(239,226,200,0.14),rgba(58,38,26,0.1))] p-4 shadow-[0_44px_84px_rgba(0,0,0,0.48)] backdrop-blur-sm">
           <Image
             src="/images/hero/floating-book.svg"
             alt=""
             fill
-            className="object-contain"
+            className="object-contain opacity-95 drop-shadow-[0_28px_38px_rgba(0,0,0,0.35)] [filter:saturate(.82)_contrast(1.04)]"
             priority
-            sizes="(max-width: 640px) 78vw, (max-width: 1024px) 46vw, 470px"
+            sizes="(max-width: 640px) 72vw, (max-width: 1024px) 46vw, 470px"
           />
+          <div className="absolute inset-4 rounded-[1.4rem] bg-[linear-gradient(110deg,rgba(255,255,255,0.2),transparent_28%,transparent_68%,rgba(0,0,0,0.2))]" />
         </div>
       </motion.div>
     </motion.div>

@@ -1,9 +1,10 @@
 import { routes } from "@/constants/routes";
+import { defaultCurrency, defaultPriceLocale } from "@/constants/currency";
 
 export const siteConfig = {
   name: "Webook",
   description:
-    "Ecommerce moderno de libros con recomendaciones, colecciones curadas y una experiencia visual inmersiva.",
+    "Ecommerce minimalista de libros con recomendaciones, colecciones curadas e imágenes realistas.",
   url: "https://webook.example.com",
   keywords: [
     "libros",
@@ -14,7 +15,7 @@ export const siteConfig = {
     "autores",
     "Webook",
   ],
-  author: "Webook Team",
+  author: "Equipo Webook",
   navItems: [
     {
       label: "Inicio",
@@ -39,8 +40,8 @@ export const siteConfig = {
     linkedin: "https://linkedin.com/company/webook",
   },
   ecommerce: {
-    currency: "USD",
-    defaultLocale: "es-CO",
+    currency: defaultCurrency,
+    defaultLocale: defaultPriceLocale,
     shippingMessage: "Envíos seleccionados y recomendaciones hechas para ti.",
     supportEmail: "support@webook.example.com",
   },

@@ -1,8 +1,17 @@
 <svg width="320" height="460" viewBox="0 0 320 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="g" x1="20" y1="14" x2="290" y2="440"><stop stop-color="#15222C"/><stop offset="0.54" stop-color="#47697A"/><stop offset="1" stop-color="#F1CF88"/></linearGradient></defs>
-  <rect width="320" height="460" rx="18" fill="url(#g)"/>
-  <circle cx="160" cy="212" r="92" stroke="#FFF8EC" stroke-opacity="0.3" stroke-width="2"/>
-  <circle cx="160" cy="212" r="54" stroke="#FFF8EC" stroke-opacity="0.5" stroke-width="8"/>
-  <path d="M94 86H226M82 360H238M98 388H204" stroke="#FFF8EC" stroke-width="6" stroke-linecap="round"/>
-  <path d="M160 118V306M66 212H254" stroke="#FFF8EC" stroke-opacity="0.22" stroke-width="3"/>
+  <defs>
+    <linearGradient id="cover" x1="20" y1="14" x2="290" y2="440">
+      <stop stop-color="#A0C9CB"/>
+      <stop offset="0.52" stop-color="#ECECDC"/>
+      <stop offset="1" stop-color="#351E1C"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="460" rx="18" fill="url(#cover)"/>
+  <circle cx="160" cy="224" r="94" stroke="#351E1C" stroke-opacity="0.18" stroke-width="2"/>
+  <circle cx="160" cy="224" r="58" stroke="#FF6037" stroke-opacity="0.72" stroke-width="10"/>
+  <path d="M160 118V330M54 224H266" stroke="#351E1C" stroke-opacity="0.22" stroke-width="4"/>
+  <rect x="56" y="54" width="208" height="86" rx="14" fill="#F5F4ED" fill-opacity="0.78"/>
+  <text x="72" y="92" fill="#351E1C" font-family="Arial, sans-serif" font-size="30" font-weight="800">CODIGO</text>
+  <text x="72" y="124" fill="#351E1C" font-family="Arial, sans-serif" font-size="30" font-weight="800">AURORA</text>
+  <text x="72" y="394" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="15" font-weight="700">NORA BYTE</text>
 </svg>

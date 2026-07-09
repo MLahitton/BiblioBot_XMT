@@ -6,18 +6,28 @@ import type {
 export function mapCategoryApiToCategory(
   category: CategoryApiResponse,
 ): Category {
+  const slug = category.name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
   return {
     id: category.id,
     name: category.name,
-    description: category.description,
-    icon: category.icon_url,
-    slug: category.slug,
-    totalBooks: category.total_books,
+    description: `Libros de ${category.name}`,
+    icon: "/icons/category.svg",
+    slug: slug || category.id,
+    totalBooks: category.totalBooks ?? 0,
   };
 }
 
 export function mapCategoriesApiToCategories(
   categories: CategoryApiResponse[],
 ): Category[] {
-  return categories.map(mapCategoryApiToCategory);
+  return categories
+    .filter((category) => category.isActive)
+    .map(mapCategoryApiToCategory)
+    .sort((current, next) => next.totalBooks - current.totalBooks || current.name.localeCompare(next.name));
 }

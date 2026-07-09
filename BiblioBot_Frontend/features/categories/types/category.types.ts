@@ -10,8 +10,6 @@ export type Category = {
 export type CategoryApiResponse = {
   id: string;
   name: string;
-  description: string;
-  icon_url: string;
-  slug: string;
-  total_books: number;
+  isActive: boolean;
+  totalBooks?: number;
 };

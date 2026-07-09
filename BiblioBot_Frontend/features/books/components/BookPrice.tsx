@@ -12,12 +12,12 @@ const priceFormatter = new Intl.NumberFormat(
 
 export function BookPrice({ price, previousPrice }: BookPriceProps) {
   return (
-    <div className="flex items-baseline gap-2">
-      <span className="text-lg font-semibold text-foreground">
+    <div className="shrink-0 text-center">
+      <span className="block text-base font-black text-foreground">
         {priceFormatter.format(price)}
       </span>
       {previousPrice ? (
-        <span className="text-sm text-muted line-through">
+        <span className="block text-[0.68rem] font-semibold text-muted line-through">
           {priceFormatter.format(previousPrice)}
         </span>
       ) : null}

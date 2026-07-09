@@ -1,10 +1,11 @@
-export const defaultCurrency = "USD";
+export const defaultCurrency = "COP";
 
 export const defaultPriceLocale = "es-CO";
 
 export const priceFormatOptions: Intl.NumberFormatOptions = {
   style: "currency",
   currency: defaultCurrency,
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
+  currencyDisplay: "code",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
 };

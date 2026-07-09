@@ -1,7 +1,16 @@
 <svg width="320" height="460" viewBox="0 0 320 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="g" x1="0" y1="460" x2="320" y2="0"><stop stop-color="#1B2B24"/><stop offset="1" stop-color="#CDE0B1"/></linearGradient></defs>
-  <rect width="320" height="460" rx="18" fill="url(#g)"/>
-  <path d="M160 88C214 136 238 190 210 252C190 296 150 318 110 360C92 292 86 232 112 174C124 146 140 118 160 88Z" fill="#FFF8EC" opacity="0.22"/>
-  <path d="M160 104C158 196 150 276 116 344" stroke="#FFF8EC" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
-  <path d="M82 378H238M104 404H216" stroke="#FFF8EC" stroke-width="6" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="cover" x1="0" y1="460" x2="320" y2="0">
+      <stop stop-color="#351E1C"/>
+      <stop offset="0.44" stop-color="#733635"/>
+      <stop offset="1" stop-color="#A0C9CB"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="460" rx="18" fill="url(#cover)"/>
+  <path d="M162 112C218 166 238 218 210 276C190 318 150 334 108 380C90 306 88 246 116 184C128 156 144 130 162 112Z" fill="#F5F4ED" opacity="0.22"/>
+  <path d="M162 130C160 218 150 302 114 366" stroke="#F5F4ED" stroke-opacity="0.78" stroke-width="6" stroke-linecap="round"/>
+  <path d="M124 206C150 216 176 212 206 190M116 258C144 268 178 260 212 232" stroke="#A0C9CB" stroke-width="5" stroke-linecap="round"/>
+  <text x="62" y="86" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="32" font-weight="800">MATERIA</text>
+  <text x="62" y="122" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="32" font-weight="800">VIVA</text>
+  <text x="62" y="404" fill="#F5F4ED" fill-opacity="0.82" font-family="Arial, sans-serif" font-size="15" font-weight="700">SOFIA RIOS</text>
 </svg>

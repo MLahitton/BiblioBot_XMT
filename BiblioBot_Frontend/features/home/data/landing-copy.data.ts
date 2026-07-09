@@ -1,43 +1,34 @@
 export const landingCopy = {
   hero: {
-    eyebrow: "Webook Library",
-    title: "Descubre tu próximo libro favorito.",
-    subtitle:
-      "Explora historias, autores y recomendaciones pensadas para convertir cada lectura en una experiencia personal.",
+    eyebrow: "Tienda Webook",
+    title: "Todo lo que necesitas para leer mejor",
+    subtitle: "Libros curados, imágenes realistas y una compra tranquila.",
     primaryAction: "Explorar libros",
-    secondaryAction: "Ver destacados",
+    secondaryAction: "Descubrir",
   },
   categories: {
-    eyebrow: "Colecciones curadas",
-    title: "Encuentra el género que encaja con tu momento.",
-    description:
-      "Categorías claras para pasar de la curiosidad al libro indicado en menos tiempo.",
+    eyebrow: "Categorías",
+    title: "Categorías",
+    description: "Explora por colección.",
   },
   featuredBooks: {
-    eyebrow: "Selección editorial",
-    title: "Libros destacados para empezar hoy.",
-    description:
-      "Una mezcla de novedades, favoritos y ediciones especiales listas para tu biblioteca.",
+    eyebrow: "Tienda",
+    title: "Todo lo que necesitas",
+    description: "Catálogo limpio de libros seleccionados para tu biblioteca.",
   },
   benefits: {
-    eyebrow: "Compra con calma",
-    title: "Una experiencia pensada para lectores exigentes.",
+    eyebrow: "Recomendaciones",
+    title: "Explora nuestras recomendaciones",
     items: [
-      "Recomendaciones visuales y fáciles de explorar.",
-      "Información clara de precio, stock y categoría.",
-      "Una interfaz preparada para descubrir sin fricción.",
+      "Libros claros y fáciles de comparar.",
+      "Categoría, precio y valoración sin ruido visual.",
+      "Sistema listo para imágenes reales desde API.",
     ],
   },
-  personalizedExperience: {
-    eyebrow: "Lectura a tu ritmo",
-    title: "Recomendaciones que se sienten cercanas.",
-    description:
-      "Webook está preparado para adaptar colecciones, autores y estilos a tus intereses.",
-  },
   finalCta: {
-    title: "Tu siguiente historia puede empezar aquí.",
+    title: "¿Listo para descubrir nuevos libros?",
     description:
-      "Prepara tu lista, explora categorías y guarda los libros que quieras leer después.",
-    action: "Entrar a Webook",
+      "Recibe recomendaciones sencillas, útiles y pensadas para tu siguiente lectura.",
+    action: "Enviar",
   },
 } as const;

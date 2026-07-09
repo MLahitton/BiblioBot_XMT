@@ -1,7 +1,16 @@
 <svg width="320" height="460" viewBox="0 0 320 460" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="g" x1="44" y1="30" x2="276" y2="430"><stop stop-color="#32214A"/><stop offset="0.52" stop-color="#7D4E74"/><stop offset="1" stop-color="#D7A74F"/></linearGradient></defs>
-  <rect width="320" height="460" rx="18" fill="url(#g)"/>
-  <path d="M160 68L198 156L294 166L222 230L242 326L160 276L78 326L98 230L26 166L122 156L160 68Z" fill="#FFF8EC" opacity="0.18"/>
-  <path d="M94 356H226M118 384H202" stroke="#FFF8EC" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="160" cy="214" r="42" stroke="#FFF8EC" stroke-opacity="0.55" stroke-width="5"/>
+  <defs>
+    <linearGradient id="cover" x1="44" y1="30" x2="276" y2="430">
+      <stop stop-color="#351E1C"/>
+      <stop offset="0.54" stop-color="#733635"/>
+      <stop offset="1" stop-color="#FF6037"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="460" rx="18" fill="url(#cover)"/>
+  <path d="M160 84L196 162L280 174L218 230L236 314L160 270L84 314L102 230L40 174L124 162L160 84Z" fill="#F5F4ED" opacity="0.18"/>
+  <circle cx="160" cy="222" r="56" stroke="#A0C9CB" stroke-opacity="0.75" stroke-width="6"/>
+  <path d="M104 336H218M104 362H178" stroke="#F5F4ED" stroke-width="7" stroke-linecap="round"/>
+  <text x="58" y="96" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="32" font-weight="800">REINOS</text>
+  <text x="58" y="132" fill="#F5F4ED" font-family="Arial, sans-serif" font-size="32" font-weight="800">DE BRUMA</text>
+  <text x="58" y="400" fill="#F5F4ED" fill-opacity="0.84" font-family="Arial, sans-serif" font-size="15" font-weight="700">TOMAS ARDEN</text>
 </svg>

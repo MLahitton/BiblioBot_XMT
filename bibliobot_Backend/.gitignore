@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Local ASP.NET DataProtection keys
+Api/.keys/
+
 # User-specific files
 *.rsuser
 *.suo
