@@ -1,4 +1,6 @@
-from app.clients import MockDotNetClient
+from app.clients import DotNetClientProtocol, get_dotnet_client
+from app.clients.dotnet_api_client import DotNetApiClient
+from app.clients.dotnet_client_errors import DotNetApiError
 from app.services.auth_required_service import AuthRequiredService
 from app.services.confirmation_service import ConfirmationService
 from app.services.permission_service import PermissionService
@@ -23,12 +25,14 @@ from app.tools.tool_schemas import (
 class BiblioBotToolService:
     def __init__(
         self,
-        mock_client: MockDotNetClient | None = None,
+        mock_client: DotNetClientProtocol | None = None,
+        backend_client: DotNetClientProtocol | None = None,
         permission_service: PermissionService | None = None,
         confirmation_service: ConfirmationService | None = None,
         auth_required_service: AuthRequiredService | None = None,
     ):
-        self.mock_client = mock_client or MockDotNetClient()
+        self.backend_client = backend_client or mock_client or get_dotnet_client()
+        self.mock_client = self.backend_client
         self.permission_service = permission_service or PermissionService()
         self.confirmation_service = confirmation_service or ConfirmationService()
         self.auth_required_service = auth_required_service or AuthRequiredService()
@@ -37,9 +41,12 @@ class BiblioBotToolService:
         if not self._has_any_permission(context, ["books.read", "books.search"]):
             return self._permission_denied(["books.read", "books.search"])
 
-        books = self.mock_client.search_books(input_data.query)
+        try:
+            books = self.backend_client.search_books(input_data.query)
+        except DotNetApiError as error:
+            return self._backend_error(error)
         return {
-            "status": "MOCK_ONLY",
+            "status": self._client_status(),
             "mode": "READ_ONLY",
             "query": input_data.query,
             "resultCount": len(books),
@@ -50,19 +57,25 @@ class BiblioBotToolService:
         if not self._has_permission(context, "books.read"):
             return self._permission_denied(["books.read"])
 
-        book = self.mock_client.get_book_detail(input_data.book_id)
+        try:
+            book = self.backend_client.get_book_detail(input_data.book_id)
+        except DotNetApiError as error:
+            return self._backend_error(error)
         if not book:
             return {"status": "NOT_FOUND", "mode": "READ_ONLY", "bookId": input_data.book_id, "book": None}
-        return {"status": "MOCK_ONLY", "mode": "READ_ONLY", "book": book}
+        return {"status": self._client_status(), "mode": "READ_ONLY", "book": book}
 
     def check_stock(self, input_data: CheckStockInput, context: ToolExecutionContext) -> dict:
         if not self._has_any_permission(context, ["books.read", "inventory.read"]):
             return self._permission_denied(["books.read", "inventory.read"])
 
-        stock = self.mock_client.check_stock(input_data.book_id, input_data.branch_id)
+        try:
+            stock = self.backend_client.check_stock(input_data.book_id, input_data.branch_id)
+        except DotNetApiError as error:
+            return self._backend_error(error)
         if not stock:
             return {"status": "NOT_FOUND", "mode": "READ_ONLY", "bookId": input_data.book_id, "stock": None}
-        return {"status": "MOCK_ONLY", "mode": "READ_ONLY", "stock": stock}
+        return {"status": self._client_status(), "mode": "READ_ONLY", "stock": stock}
 
     def get_cart(self, input_data: GetCartInput, context: ToolExecutionContext) -> dict:
         auth_required = self._auth_required_if_guest(context, "cart_read")
@@ -72,8 +85,11 @@ class BiblioBotToolService:
         if not self._has_any_permission(context, ["cart.read", "cart.manage"]):
             return self._permission_denied(["cart.read", "cart.manage"])
 
-        cart = self.mock_client.get_cart(input_data.session_id)
-        return {"status": "MOCK_ONLY", "mode": "READ_ONLY", "cart": cart}
+        try:
+            cart = self.backend_client.get_cart(input_data.session_id)
+        except DotNetApiError as error:
+            return self._backend_error(error)
+        return {"status": self._client_status(), "mode": "READ_ONLY", "cart": cart}
 
     def add_or_update_cart_item(
         self,
@@ -104,7 +120,7 @@ class BiblioBotToolService:
 
         details = input_data.model_dump()
         details["origin_code"] = "CHATBOT"
-        draft = self.mock_client.create_sale_draft(
+        draft = self.backend_client.create_sale_draft(
             input_data.session_id,
             branch_id=input_data.branch_id,
         )
@@ -139,7 +155,10 @@ class BiblioBotToolService:
             return self._permission_denied(["invoices.read_own", "invoices.read_all"])
 
         if input_data.invoice_id:
-            invoice = self.mock_client.get_invoice(input_data.invoice_id)
+            try:
+                invoice = self.backend_client.get_invoice(input_data.invoice_id)
+            except DotNetApiError as error:
+                return self._backend_error(error)
             if not invoice:
                 return {
                     "status": "NOT_FOUND",
@@ -147,10 +166,10 @@ class BiblioBotToolService:
                     "invoiceId": input_data.invoice_id,
                     "invoice": None,
                 }
-            return {"status": "MOCK_ONLY", "mode": "READ_ONLY", "invoice": invoice}
+            return {"status": self._client_status(), "mode": "READ_ONLY", "invoice": invoice}
 
         return {
-            "status": "MOCK_ONLY",
+            "status": self._client_status(),
             "mode": "READ_ONLY",
             "saleId": input_data.sale_id,
             "invoice": None,
@@ -167,9 +186,12 @@ class BiblioBotToolService:
         if input_data.scope == "own" and not self._has_any_permission(context, ["sales.read_own", "sales.read_all"]):
             return self._permission_denied(["sales.read_own", "sales.read_all"])
 
-        sales = self.mock_client.query_sales(input_data.scope)
+        try:
+            sales = self.backend_client.query_sales(input_data.scope)
+        except DotNetApiError as error:
+            return self._backend_error(error)
         return {
-            "status": "MOCK_ONLY",
+            "status": self._client_status(),
             "mode": "READ_ONLY",
             "scope": input_data.scope,
             "resultCount": len(sales),
@@ -185,9 +207,12 @@ class BiblioBotToolService:
             return self._permission_denied(["inventory.read"])
 
         if input_data.only_low_stock:
-            books = self.mock_client.get_low_stock_books()
+            try:
+                books = self.backend_client.get_low_stock_books()
+            except DotNetApiError as error:
+                return self._backend_error(error)
             return {
-                "status": "MOCK_ONLY",
+                "status": self._client_status(),
                 "mode": "READ_ONLY",
                 "onlyLowStock": True,
                 "resultCount": len(books),
@@ -195,11 +220,18 @@ class BiblioBotToolService:
             }
 
         inventory = []
-        for book in self.mock_client.search_books():
-            stock = self.mock_client.check_stock(book["id"], input_data.branch_id)
+        try:
+            books = self.backend_client.search_books()
+        except DotNetApiError as error:
+            return self._backend_error(error)
+        for book in books:
+            try:
+                stock = self.backend_client.check_stock(book["id"], input_data.branch_id)
+            except DotNetApiError as error:
+                return self._backend_error(error)
             inventory.append(stock)
         return {
-            "status": "MOCK_ONLY",
+            "status": self._client_status(),
             "mode": "READ_ONLY",
             "branchId": input_data.branch_id,
             "resultCount": len(inventory),
@@ -218,7 +250,7 @@ class BiblioBotToolService:
         if not self._has_permission(context, "inventory.entry"):
             return self._permission_denied(["inventory.entry"])
 
-        simulation = self.mock_client.simulate_inventory_entry(
+        simulation = self.backend_client.simulate_inventory_entry(
             input_data.book_id,
             input_data.quantity,
             input_data.branch_id,
@@ -242,7 +274,7 @@ class BiblioBotToolService:
         if not self._has_permission(context, "requests.purchase.create"):
             return self._permission_denied(["requests.purchase.create"])
 
-        simulation = self.mock_client.simulate_purchase_request(
+        simulation = self.backend_client.simulate_purchase_request(
             input_data.book_id,
             input_data.quantity,
             input_data.notes,
@@ -266,7 +298,7 @@ class BiblioBotToolService:
         if not self._has_permission(context, "requests.transfer.create"):
             return self._permission_denied(["requests.transfer.create"])
 
-        simulation = self.mock_client.simulate_transfer_request(
+        simulation = self.backend_client.simulate_transfer_request(
             input_data.book_id,
             input_data.quantity,
             input_data.source_branch_id,
@@ -298,7 +330,7 @@ class BiblioBotToolService:
         )
         return {
             "status": "PENDING_CONFIRMATION",
-            "mode": "MOCK_ONLY",
+            "mode": self._client_status(),
             "requiresConfirmation": True,
             "actionRef": action_ref,
             "pendingAction": pending_action,
@@ -333,3 +365,15 @@ class BiblioBotToolService:
             "requiredPermissions": required_permissions,
             "message": "No tienes permisos para ejecutar esta tool.",
         }
+
+    def _client_status(self) -> str:
+        return "REAL_BACKEND" if isinstance(self.backend_client, DotNetApiClient) else "MOCK_ONLY"
+
+    def _backend_error(self, error: DotNetApiError) -> dict:
+        safe_error = error.to_safe_dict()
+        if error.error_code == "permission_denied":
+            safe_error["status"] = "PERMISSION_DENIED"
+        if error.error_code == "backend_unauthorized":
+            safe_error["status"] = "AUTH_REQUIRED"
+            safe_error["requiresAuthentication"] = True
+        return safe_error

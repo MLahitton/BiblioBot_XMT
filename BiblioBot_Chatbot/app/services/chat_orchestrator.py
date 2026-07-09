@@ -1,7 +1,7 @@
 import re
 import unicodedata
 
-from app.clients import MockDotNetClient
+from app.clients import DotNetClientProtocol, get_dotnet_client
 from app.schemas.chat_contract import (
     ChatContext,
     ChatLink,
@@ -18,12 +18,12 @@ from app.services.permission_service import PermissionService
 class ChatOrchestratorService:
     def __init__(
         self,
-        mock_client: MockDotNetClient | None = None,
+        mock_client: DotNetClientProtocol | None = None,
         permission_service: PermissionService | None = None,
         confirmation_service: ConfirmationService | None = None,
         llm_assistant_service: LlmAssistantService | None = None,
     ):
-        self.mock_client = mock_client or MockDotNetClient()
+        self.mock_client = mock_client or get_dotnet_client()
         self.permission_service = permission_service or PermissionService()
         self.confirmation_service = confirmation_service or ConfirmationService()
         self.llm_assistant_service = llm_assistant_service or LlmAssistantService()

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,9 +15,12 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
 
     dotnet_api_base_url: str = "http://localhost:5000"
+    dotnet_api_timeout_seconds: int = 10
+    dotnet_api_bearer_token: str | None = Field(default=None, repr=False)
     chatbot_internal_api_key: str = "dev_internal_key"
 
     use_mock_dotnet_client: bool = True
+    allow_real_backend_mutations: bool = False
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

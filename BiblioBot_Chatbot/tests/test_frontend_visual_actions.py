@@ -153,7 +153,16 @@ def test_regressions_health_permissions_guest_and_pending_purchase_stay_safe():
 
 def test_no_openai_db_http_or_real_mutation_code_added_for_visual_phase():
     app_dir = Path(__file__).resolve().parents[1] / "app"
-    source = "\n".join(path.read_text(encoding="utf-8").lower() for path in app_dir.rglob("*.py"))
+    source_by_file = {
+        path.relative_to(app_dir).as_posix(): path.read_text(encoding="utf-8").lower()
+        for path in app_dir.rglob("*.py")
+    }
+    source = "\n".join(source_by_file.values())
+    http_source = "\n".join(
+        content
+        for relative_path, content in source_by_file.items()
+        if relative_path not in {"clients/dotnet_api_client.py"}
+    )
 
     assert "openai" not in source
     assert "psycopg" not in source
@@ -161,5 +170,5 @@ def test_no_openai_db_http_or_real_mutation_code_added_for_visual_phase():
     assert "sqlalchemy" not in source
     assert "import requests" not in source
     assert "from requests" not in source
-    assert "import httpx" not in source
-    assert "from httpx" not in source
+    assert "import httpx" not in http_source
+    assert "from httpx" not in http_source
