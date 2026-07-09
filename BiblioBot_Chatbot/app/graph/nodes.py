@@ -89,7 +89,7 @@ def make_base_validation_node(permission_service: PermissionService) -> Callable
         if not state.get("session_id", "").strip():
             return _terminal_response(
                 state,
-                response="Falta la trazabilidad de sesion. Envia un sessionId valido para continuar.",
+                response="Necesito un sessionId valido para mantener la trazabilidad de la conversacion.",
                 chat_state=ChatState.NEEDS_CLARIFICATION,
                 intent="missing_session",
                 next_action="REQUEST_VALID_SESSION",
@@ -97,7 +97,7 @@ def make_base_validation_node(permission_service: PermissionService) -> Callable
         if not permission_service.has_permission(permissions, "chat.message"):
             return _terminal_response(
                 state,
-                response="No tienes permisos para usar el chat del sistema.",
+                response="No puedo abrir el chat porque tu usuario no tiene el permiso necesario.",
                 chat_state=ChatState.FAILED,
                 intent="permission_denied",
                 next_action="PERMISSION_DENIED",
@@ -105,7 +105,7 @@ def make_base_validation_node(permission_service: PermissionService) -> Callable
         if not state.get("roles"):
             return _terminal_response(
                 state,
-                response="No se pudo identificar el rol del usuario. Verifica tu sesion e intenta nuevamente.",
+                response="No pude identificar tu sesion correctamente. Verifica tus datos e intenta nuevamente.",
                 chat_state=ChatState.FAILED,
                 intent="missing_roles",
                 next_action="REQUEST_VALID_ROLE",
@@ -123,7 +123,7 @@ def make_confirmation_control_node(
         if confirmation_service.is_explicit_cancellation(message):
             return _terminal_response(
                 state,
-                response="No se ejecuto ninguna accion. Puedes continuar cuando quieras.",
+                response="Listo, cancele la accion pendiente. No se realizo ningun cambio.",
                 chat_state=ChatState.IDLE,
                 intent="cancel_confirmation",
                 next_action="WAITING_USER_MESSAGE",
@@ -131,7 +131,7 @@ def make_confirmation_control_node(
         if confirmation_service.is_explicit_confirmation(message):
             return _terminal_response(
                 state,
-                response="No hay una accion pendiente valida para confirmar. Indica primero que necesitas hacer.",
+                response="Aun no tengo una accion pendiente para confirmar. Dime primero que necesitas hacer.",
                 chat_state=ChatState.NEEDS_CLARIFICATION,
                 intent="confirmation_without_pending_action",
                 next_action="ASK_ACTION_DETAILS",
@@ -197,7 +197,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
             if not book:
                 return _asking_details(
                     state,
-                    "Indica el nombre o identificador del libro para revisar su detalle.",
+                    "Claro. Indica el nombre o identificador del libro y reviso el detalle.",
                     "ASK_BOOK_IDENTIFIER",
                 )
             result = tool_service.get_book_detail(GetBookDetailInput(book_id=book["id"]), context)
@@ -208,7 +208,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
             if not book:
                 return _asking_details(
                     state,
-                    "Indica el libro y la sede o sucursal para revisar disponibilidad.",
+                    "Indica el libro y, si aplica, la sede para revisar disponibilidad.",
                     "ASK_BOOK_AND_BRANCH",
                 )
             result = tool_service.check_stock(CheckStockInput(book_id=book["id"]), context)
@@ -219,7 +219,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
             if not invoice_id:
                 return _asking_details(
                     state,
-                    "Indica el numero de factura o identificador de venta que quieres consultar.",
+                    "Indica el numero de factura o el identificador de venta que quieres consultar.",
                     "ASK_INVOICE_OR_SALE_ID",
                 )
             result = tool_service.get_invoice(GetInvoiceInput(invoice_id=invoice_id), context)
@@ -236,7 +236,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
             if not book or not quantity:
                 return _asking_details(
                     state,
-                    "Indica el libro y la cantidad. No se hara ninguna compra sin confirmacion explicita.",
+                    "Indica el libro y la cantidad. No preparare ninguna compra sin esos datos y sin tu confirmacion.",
                     "ASK_BOOK_AND_QUANTITY",
                     requires_confirmation=True,
                 )
@@ -305,7 +305,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
         if intent == "general_help":
             return {
                 **state,
-                "response": "Puedo ayudarte con las funciones habilitadas por tus permisos: "
+                "response": "Hola, soy BiblioBot. Puedo ayudarte con "
                 f"{_describe_allowed_capabilities(state.get('permissions', []))}.",
                 "state": ChatState.IDLE.value,
                 "next_step": "WAITING_USER_MESSAGE",
@@ -317,7 +317,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
 
         return {
             **state,
-            "response": "Puedo ayudarte con catalogo, disponibilidad, compras, facturas e inventario. Que necesitas hacer?",
+            "response": "Puedo ayudarte con catalogo, disponibilidad, compras, facturas e inventario. Que necesitas revisar?",
             "state": ChatState.NEEDS_CLARIFICATION.value,
             "next_step": "ASK_CLARIFICATION",
             "metadata": {
@@ -352,7 +352,7 @@ def final_safety_node(state: ChatGraphState) -> ChatGraphState:
         safe_state = ChatState.WAITING_CONFIRMATION.value
         state = {
             **state,
-            "response": "La accion sensible quedo solo pendiente de confirmacion. No se ejecuto ninguna mutacion real.",
+            "response": "La accion quedo pendiente de confirmacion. No se ejecuto ningun cambio real.",
         }
 
     selected_book_id = context.get("selectedBookId")
@@ -391,15 +391,21 @@ def final_safety_node(state: ChatGraphState) -> ChatGraphState:
 
 
 def _catalog_result_state(state: ChatGraphState, query: str | None, result: dict[str, Any]) -> ChatGraphState:
-    books = result.get("books", []) if result.get("status") == "MOCK_ONLY" else []
-    titles = [book["title"] for book in books[:3]]
+    if _is_backend_error(result):
+        response = "No pude consultar el catalogo en este momento. Puedes intentarlo nuevamente en unos segundos."
+        books = []
+    else:
+        books = result.get("books", []) if result.get("status") == "MOCK_ONLY" else []
+        titles = [book["title"] for book in books[:3]]
+        response = (
+            "Claro, encontre algunos libros relacionados con tu busqueda. Te dejo el catalogo filtrado para revisarlos: "
+            + "; ".join(titles)
+            + "."
+            if titles
+            else "No encontre coincidencias por ahora. Puedes probar con otro titulo, autor o categoria."
+        )
     filters = _catalog_filters(query)
     catalog_link = FRONTEND_ACTION_SERVICE.build_catalog_link(query, filters)
-    response = (
-        "Encontre estos libros en el catalogo simulado: " + "; ".join(titles) + "."
-        if titles
-        else "No encontre coincidencias en el catalogo simulado. Prueba con titulo, autor o categoria."
-    )
     return {
         **state,
         "response": response,
@@ -418,14 +424,20 @@ def _catalog_result_state(state: ChatGraphState, query: str | None, result: dict
 
 
 def _book_detail_result_state(state: ChatGraphState, result: dict[str, Any]) -> ChatGraphState:
+    if _is_backend_error(result):
+        return _asking_details(
+            state,
+            "No pude consultar el detalle del libro en este momento. Puedes intentarlo nuevamente en unos segundos.",
+            "ASK_BOOK_IDENTIFIER",
+        )
     book = result.get("book")
     if not book:
-        return _asking_details(state, "No encontre ese libro en los datos simulados. Indica otro titulo o identificador.", "ASK_BOOK_IDENTIFIER")
+        return _asking_details(state, "No encontre ese libro. Indica otro titulo o identificador y lo reviso.", "ASK_BOOK_IDENTIFIER")
     link = FRONTEND_ACTION_SERVICE.build_book_detail_link(book["id"], book["title"])
     visual_metadata = FRONTEND_ACTION_SERVICE.build_book_metadata(book["id"], book["title"])
     return {
         **state,
-        "response": f"{book['title']} de {book['author']}. Genero: {book['genre']}. Precio simulado: {book['price']}.",
+        "response": "Encontre este libro. Te dejo el detalle para revisar su informacion, disponibilidad y precio.",
         "state": ChatState.INTENT_DETECTED.value,
         "ui_action": UiActionType.NAVIGATE_TO_PRODUCT.value,
         "links": [link],
@@ -437,12 +449,18 @@ def _book_detail_result_state(state: ChatGraphState, result: dict[str, Any]) -> 
 
 
 def _stock_result_state(state: ChatGraphState, result: dict[str, Any]) -> ChatGraphState:
+    if _is_backend_error(result):
+        return _asking_details(
+            state,
+            "No pude consultar la disponibilidad en este momento. Puedes intentarlo nuevamente en unos segundos.",
+            "ASK_BOOK_AND_BRANCH",
+        )
     stock = result.get("stock")
     if not stock:
-        return _asking_details(state, "No encontre stock para ese libro en los datos simulados.", "ASK_BOOK_AND_BRANCH")
+        return _asking_details(state, "No encontre disponibilidad para ese libro. Revisa el titulo o la sede e intenta de nuevo.", "ASK_BOOK_AND_BRANCH")
     return {
         **state,
-        "response": f"Stock simulado para {stock['title']}: {stock.get('totalStock', stock.get('stock', 0))} unidades en total.",
+        "response": f"Encontre disponibilidad para {stock['title']}: {stock.get('totalStock', stock.get('stock', 0))} unidades en total.",
         "state": ChatState.INTENT_DETECTED.value,
         "next_step": "STOCK_CHECK_READY",
         "tool_result": result,
@@ -451,11 +469,20 @@ def _stock_result_state(state: ChatGraphState, result: dict[str, Any]) -> ChatGr
 
 
 def _invoice_result_state(state: ChatGraphState, invoice_id: str, result: dict[str, Any]) -> ChatGraphState:
+    if _is_backend_error(result):
+        return {
+            **state,
+            "response": "No pude consultar esa factura en este momento. Puedes intentarlo nuevamente en unos segundos.",
+            "state": ChatState.NEEDS_CLARIFICATION.value,
+            "next_step": "ASK_INVOICE_OR_SALE_ID",
+            "tool_result": result,
+            "metadata": {**state.get("metadata", {}), "invoiceId": invoice_id, "invoice": None},
+        }
     invoice = result.get("invoice")
     if not invoice:
         return {
             **state,
-            "response": "No encontre esa factura en los datos simulados.",
+            "response": "No encontre esa factura. Verifica el numero o comparte el identificador de venta.",
             "state": ChatState.NEEDS_CLARIFICATION.value,
             "next_step": "ASK_INVOICE_OR_SALE_ID",
             "tool_result": result,
@@ -463,7 +490,7 @@ def _invoice_result_state(state: ChatGraphState, invoice_id: str, result: dict[s
         }
     return {
         **state,
-        "response": f"Factura simulada {invoice['id']} encontrada. Total: {invoice['total']}. Estado: {invoice['status']}.",
+        "response": f"Encontre la factura {invoice['id']}. Total: {invoice['total']}. Estado: {invoice['status']}.",
         "state": ChatState.INTENT_DETECTED.value,
         "ui_action": UiActionType.SHOW_INVOICE.value,
         "links": [],
@@ -483,9 +510,9 @@ def _sales_result_state(state: ChatGraphState, result: dict[str, Any]) -> ChatGr
     scope = result.get("scope", "own")
     count = result.get("resultCount", 0)
     response = (
-        f"Encontre {count} venta simulada para consulta general."
+        f"Encontre {count} venta para la consulta general."
         if scope == "all"
-        else f"Encontre {count} venta simulada asociada a tu consulta."
+        else f"Encontre {count} venta asociada a tu consulta."
     )
     return {
         **state,
@@ -516,7 +543,7 @@ def _pending_confirmation_state(
         context["selectedBookId"] = selected_book_id
     return {
         **state,
-        "response": f"{summary}. Confirma explicitamente para continuar. En esta fase no se ejecuta ninguna accion real.",
+        "response": f"Perfecto. Ya tengo preparada esta accion: {summary}. Antes de continuar, necesito que confirmes si deseas realizarla.",
         "state": ChatState.WAITING_CONFIRMATION.value,
         "next_step": "AWAIT_EXPLICIT_CONFIRMATION",
         "requires_confirmation": True,
@@ -530,9 +557,9 @@ def _pending_confirmation_state(
 
 def _sensitive_details_state(state: ChatGraphState, next_action: str, intent: str) -> ChatGraphState:
     messages = {
-        "inventory_entry": "Indica libro, cantidad, sede y motivo de la entrada. No se registrara nada sin confirmacion explicita.",
-        "transfer_request": "Indica libro, cantidad, sede origen y sede destino. No se creara nada sin confirmacion explicita.",
-        "purchase_request": "Indica libro, cantidad y justificacion de la solicitud. No se creara nada sin confirmacion explicita.",
+        "inventory_entry": "Indica libro, cantidad, sede y motivo de la entrada. No registrare nada sin tu confirmacion.",
+        "transfer_request": "Indica libro, cantidad, sede origen y sede destino. No creare ningun traslado sin tu confirmacion.",
+        "purchase_request": "Indica libro, cantidad y justificacion de la solicitud. No creare ninguna solicitud sin tu confirmacion.",
     }
     return {
         **state,
@@ -596,7 +623,7 @@ def _auth_required_response(state: ChatGraphState, original_intent: str) -> Chat
     }
     return {
         **state,
-        "response": "Para continuar con esa accion necesitas iniciar sesion o crear una cuenta.",
+        "response": _auth_required_message(original_intent),
         "state": ChatState.NEEDS_CLARIFICATION.value,
         "intent": "auth_required",
         "ui_action": UiActionType.NONE.value,
@@ -837,33 +864,49 @@ def _describe_allowed_capabilities(permissions: list[str]) -> str:
     service = PermissionService()
     capabilities = []
     if service.has_any_permission(permissions, ["books.read", "books.search"]):
-        capabilities.append("catalogo y disponibilidad")
+        capabilities.append("buscar libros y revisar disponibilidad")
     if service.has_any_permission(permissions, ["cart.manage", "sales.create"]):
-        capabilities.append("preparacion de compras con confirmacion")
+        capabilities.append("preparar compras con confirmacion")
     if service.has_any_permission(permissions, ["invoices.read_own", "invoices.read_all"]):
-        capabilities.append("consulta de facturas")
+        capabilities.append("consultar facturas")
     if service.has_any_permission(permissions, ["sales.read_own", "sales.read_all"]):
-        capabilities.append("consulta de ventas")
+        capabilities.append("consultar ventas")
     if service.has_any_permission(permissions, ["inventory.entry", "inventory.read"]):
-        capabilities.append("inventario")
+        capabilities.append("revisar inventario")
     if service.has_any_permission(permissions, ["requests.transfer.create", "requests.purchase.create"]):
-        capabilities.append("solicitudes internas")
-    return ", ".join(capabilities) if capabilities else "ayuda general del chat"
+        capabilities.append("preparar solicitudes internas")
+    return ", ".join(capabilities) if capabilities else "orientarte y explorar el catalogo"
 
 
 def _permission_denied_message(intent: str) -> str:
     messages = {
-        "catalog_search": "No tienes permisos para consultar el catalogo.",
-        "book_detail": "No tienes permisos para consultar detalles de libros.",
-        "stock_check": "No tienes permisos para consultar disponibilidad o inventario.",
-        "purchase_intent": "No tienes permisos para iniciar compras por chat.",
-        "invoice_query": "No tienes permisos para consultar facturas.",
-        "sales_query": "No tienes permisos para consultar ventas.",
-        "inventory_entry": "No tienes permisos para registrar entradas de inventario.",
-        "transfer_request": "No tienes permisos para crear solicitudes de traslado.",
-        "purchase_request": "No tienes permisos para crear solicitudes de compra interna.",
+        "catalog_search": "No puedo mostrar el catalogo porque tu usuario no tiene el permiso necesario.",
+        "book_detail": "No puedo mostrar detalles de libros porque tu usuario no tiene el permiso necesario.",
+        "stock_check": "No puedo consultar disponibilidad porque tu usuario no tiene el permiso necesario.",
+        "purchase_intent": "No puedo preparar esa compra porque tu usuario no tiene el permiso necesario.",
+        "invoice_query": "No puedo mostrar esa factura porque tu usuario no tiene el permiso necesario.",
+        "sales_query": "No puedo mostrar esa informacion porque tu usuario no tiene el permiso necesario.",
+        "inventory_entry": "No puedo preparar esa entrada de inventario porque tu usuario no tiene el permiso necesario.",
+        "transfer_request": "No puedo preparar esa solicitud de traslado porque tu usuario no tiene el permiso necesario.",
+        "purchase_request": "No puedo preparar esa solicitud de compra porque tu usuario no tiene el permiso necesario.",
     }
-    return messages.get(intent, "No tienes permisos para realizar esta accion.")
+    return messages.get(intent, "No puedo realizar esa accion porque tu usuario no tiene el permiso necesario.")
+
+
+def _auth_required_message(intent: str) -> str:
+    if intent in {"purchase_intent", "cart_manage", "cart_read", "create_sale", "confirm_sale"}:
+        return (
+            "Puedo ayudarte a encontrar el libro, pero para comprar o usar el carrito "
+            "necesitas iniciar sesion o crear una cuenta."
+        )
+    return (
+        "Para continuar con esa accion necesitas iniciar sesion o crear una cuenta. "
+        "Mientras tanto, puedo ayudarte a explorar el catalogo."
+    )
+
+
+def _is_backend_error(result: dict[str, Any]) -> bool:
+    return result.get("status") in {"BACKEND_ERROR", "AUTH_REQUIRED", "PERMISSION_DENIED"} and "errorCode" in result
 
 
 def _coerce_chat_state(value: Any) -> str:
