@@ -5,8 +5,6 @@ using Application.Features.Books.DisableBook;
 using Application.Features.Books.ActivateBook;
 using Application.Features.Books.GetBooks;
 using Application.Features.Books.SearchBooks;
-using Application.Features.BookReviews.GetBookReviews;
-using Application.Features.BookReviews.UpsertBookReview;
 using Application.Features.FavoriteBooks.AddFavoriteBook;
 using Application.Features.FavoriteBooks.GetFavoriteBookStatus;
 using Application.Features.FavoriteBooks.ListFavoriteBooks;
@@ -199,59 +197,6 @@ public sealed class BooksController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("{bookId:guid}/resenas")]
-    public async Task<IActionResult> GetBookReviews(
-        Guid bookId,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var result = await _sender.Send(
-                new GetBookReviewsQuery { BookId = bookId },
-                cancellationToken);
-
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-    }
-
-    [HttpPost("{bookId:guid}/resenas")]
-    [Authorize]
-    public async Task<IActionResult> UpsertBookReview(
-        Guid bookId,
-        [FromBody] CreateBookReviewRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var result = await _sender.Send(
-                new UpsertBookReviewCommand
-                {
-                    BookId = bookId,
-                    Rating = request.Rating,
-                    Comment = request.Comment,
-                },
-                cancellationToken);
-
-            return Ok(result);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-    }
-
     [HttpGet("search")]
     public async Task<IActionResult> SearchBooks(
         [FromQuery] string q,
@@ -281,45 +226,27 @@ public sealed class BooksController : ControllerBase
     public async Task<IActionResult> GetFavoriteBooks(
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = await _sender.Send(new ListFavoriteBooksQuery(), cancellationToken);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        var result = await _sender.Send(new ListFavoriteBooksQuery(), cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{bookId:guid}/favorito")]
     [Authorize]
     public async Task<IActionResult> GetFavoriteBookStatus(
-        Guid bookId,
+        [FromRoute] Guid bookId,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var result = await _sender.Send(
-                new GetFavoriteBookStatusQuery { BookId = bookId },
-                cancellationToken);
+        var result = await _sender.Send(
+            new GetFavoriteBookStatusQuery { BookId = bookId },
+            cancellationToken);
 
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
+        return Ok(result);
     }
 
     [HttpPost("{bookId:guid}/favorito")]
     [Authorize]
     public async Task<IActionResult> AddFavoriteBook(
-        Guid bookId,
+        [FromRoute] Guid bookId,
         CancellationToken cancellationToken = default)
     {
         try
@@ -328,7 +255,13 @@ public sealed class BooksController : ControllerBase
                 new AddFavoriteBookCommand { BookId = bookId },
                 cancellationToken);
 
-            return StatusCode(StatusCodes.Status201Created, result);
+            return StatusCode(
+                StatusCodes.Status201Created,
+                result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (KeyNotFoundException ex)
         {
@@ -347,16 +280,25 @@ public sealed class BooksController : ControllerBase
     [HttpDelete("{bookId:guid}/favorito")]
     [Authorize]
     public async Task<IActionResult> RemoveFavoriteBook(
-        Guid bookId,
+        [FromRoute] Guid bookId,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            await _sender.Send(
+            var removed = await _sender.Send(
                 new RemoveFavoriteBookCommand { BookId = bookId },
                 cancellationToken);
 
+            if (!removed)
+            {
+                return NotFound(new { message = "El libro no está en favoritos." });
+            }
+
             return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (KeyNotFoundException ex)
         {

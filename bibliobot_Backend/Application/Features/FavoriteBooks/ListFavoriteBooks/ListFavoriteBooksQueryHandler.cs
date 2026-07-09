@@ -22,7 +22,19 @@ public sealed class ListFavoriteBooksQueryHandler : IRequestHandler<ListFavorite
         ListFavoriteBooksQuery request,
         CancellationToken cancellationToken)
     {
-        var actorId = await GetActiveActorId(cancellationToken);
+        if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
+        {
+            throw new UnauthorizedAccessException("Usuario no autenticado.");
+        }
+
+        var actorId = _currentUserService.UserId.Value;
+        var actor = await _context.Users
+            .FirstOrDefaultAsync(user => user.Id == actorId, cancellationToken);
+
+        if (actor is null || !actor.IsActive || actor.IsDeleted)
+        {
+            throw new UnauthorizedAccessException("Usuario no autenticado.");
+        }
 
         return await _context.UserFavoriteBooks
             .AsNoTracking()
@@ -36,36 +48,9 @@ public sealed class ListFavoriteBooksQueryHandler : IRequestHandler<ListFavorite
                     .Select(author => author.Author.FullName)
                     .OrderBy(authorName => authorName)
                     .FirstOrDefault() ?? string.Empty,
-                Category = favorite.Book.BookCategories
-                    .Select(category => category.Category.Name)
-                    .OrderBy(categoryName => categoryName)
-                    .FirstOrDefault() ?? string.Empty,
-                Description = favorite.Book.Description,
                 CoverUrl = favorite.Book.ImageUrl,
-                Price = favorite.Book.Price,
-                TotalStock = favorite.Book.InventoryStocks.Sum(stock => stock.CurrentStock),
                 AddedAtUtc = favorite.CreatedAt,
             })
             .ToListAsync(cancellationToken);
-    }
-
-    private async Task<Guid> GetActiveActorId(CancellationToken cancellationToken)
-    {
-        if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
-        {
-            throw new UnauthorizedAccessException("Usuario no autenticado.");
-        }
-
-        var actorId = _currentUserService.UserId.Value;
-        var isActiveActor = await _context.Users.AnyAsync(
-            user => user.Id == actorId && user.IsActive && !user.IsDeleted,
-            cancellationToken);
-
-        if (!isActiveActor)
-        {
-            throw new UnauthorizedAccessException("Usuario no autenticado.");
-        }
-
-        return actorId;
     }
 }

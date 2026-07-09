@@ -37,6 +37,7 @@ public sealed class ChatController : ControllerBase
                 {
                     SessionId = request.SessionId,
                     Message = request.Message,
+                    IsGuest = false,
                     RolesFromClaims = GetRolesFromClaims(),
                     PermissionsFromClaims = GetPermissionsFromClaims(),
                 },
@@ -69,6 +70,58 @@ public sealed class ChatController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("public-message")]
+    [AllowAnonymous]
+    public async Task<IActionResult> SendPublicMessage(
+        [FromBody] SendChatMessageRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = await _sender.Send(
+                new SendChatMessageCommand
+                {
+                    SessionId = request.SessionId,
+                    Message = request.Message,
+                    IsGuest = true,
+                    UserId = null,
+                    UserEmail = null,
+                    RolesFromClaims = ["GUEST"],
+                    PermissionsFromClaims =
+                    [
+                        "chat.message",
+                        "books.read",
+                        "books.search"
+                    ],
+                },
+                cancellationToken);
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (HttpRequestException)
+        {
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                new { message = "No fue posible comunicarse con el servicio de chatbot." });
+        }
+        catch (TaskCanceledException)
+        {
+            return StatusCode(
+                StatusCodes.Status504GatewayTimeout,
+                new { message = "El servicio de chatbot tardó demasiado en responder." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                new { message = ex.Message });
         }
     }
 

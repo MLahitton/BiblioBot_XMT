@@ -9,33 +9,30 @@ public sealed class UserFavoriteBookConfiguration : IEntityTypeConfiguration<Use
     public void Configure(EntityTypeBuilder<UserFavoriteBook> builder)
     {
         builder.ToTable("user_favorite_books");
-        builder.HasKey(favorite => favorite.Id);
+        builder.HasKey(ufb => ufb.Id);
 
-        builder.Property(favorite => favorite.Id).HasColumnName("id");
-        builder.Property(favorite => favorite.UserId).HasColumnName("user_id");
-        builder.Property(favorite => favorite.BookId).HasColumnName("book_id");
-        builder.Property(favorite => favorite.CreatedAt)
+        builder.Property(ufb => ufb.Id).HasColumnName("id");
+        builder.Property(ufb => ufb.UserId).HasColumnName("user_id");
+        builder.Property(ufb => ufb.BookId).HasColumnName("book_id");
+        builder.Property(ufb => ufb.CreatedAt)
             .HasColumnName("created_at")
             .HasColumnType("timestamp with time zone")
             .IsRequired();
-        builder.Property(favorite => favorite.UpdatedAt)
-            .HasColumnName("updated_at")
-            .HasColumnType("timestamp with time zone");
 
-        builder.HasIndex(favorite => new { favorite.UserId, favorite.BookId })
+        builder
+            .HasOne(ufb => ufb.User)
+            .WithMany(u => u.UserFavoriteBooks)
+            .HasForeignKey(ufb => ufb.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder
+            .HasOne(ufb => ufb.Book)
+            .WithMany(b => b.UserFavoriteBooks)
+            .HasForeignKey(ufb => ufb.BookId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(ufb => new { ufb.UserId, ufb.BookId })
             .HasDatabaseName("uq_user_favorite_books_user_id_book_id")
             .IsUnique();
-
-        builder
-            .HasOne(favorite => favorite.User)
-            .WithMany(user => user.UserFavoriteBooks)
-            .HasForeignKey(favorite => favorite.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        builder
-            .HasOne(favorite => favorite.Book)
-            .WithMany(book => book.UserFavoriteBooks)
-            .HasForeignKey(favorite => favorite.BookId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

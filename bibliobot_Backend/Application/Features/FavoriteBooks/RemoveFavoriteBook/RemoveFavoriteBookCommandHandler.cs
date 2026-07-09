@@ -19,7 +19,19 @@ public sealed class RemoveFavoriteBookCommandHandler : IRequestHandler<RemoveFav
 
     public async Task<bool> Handle(RemoveFavoriteBookCommand request, CancellationToken cancellationToken)
     {
-        var actorId = await GetActiveActorId(cancellationToken);
+        if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
+        {
+            throw new UnauthorizedAccessException("Usuario no autenticado.");
+        }
+
+        var actorId = _currentUserService.UserId.Value;
+        var actor = await _context.Users
+            .FirstOrDefaultAsync(user => user.Id == actorId, cancellationToken);
+
+        if (actor is null || !actor.IsActive || actor.IsDeleted)
+        {
+            throw new UnauthorizedAccessException("Usuario no autenticado.");
+        }
 
         var bookExists = await _context.Books
             .AsNoTracking()
@@ -32,38 +44,19 @@ public sealed class RemoveFavoriteBookCommandHandler : IRequestHandler<RemoveFav
             throw new KeyNotFoundException("El libro seleccionado no existe.");
         }
 
-        var favorite = await _context.UserFavoriteBooks.FirstOrDefaultAsync(
-            favorite => favorite.UserId == actorId && favorite.BookId == request.BookId,
-            cancellationToken);
+        var favorite = await _context.UserFavoriteBooks
+            .FirstOrDefaultAsync(
+                fav => fav.UserId == actorId && fav.BookId == request.BookId,
+                cancellationToken);
 
         if (favorite is null)
         {
-            throw new KeyNotFoundException("El libro no esta en favoritos.");
+            throw new KeyNotFoundException("El libro no está en favoritos.");
         }
 
         _context.UserFavoriteBooks.Remove(favorite);
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
-    }
-
-    private async Task<Guid> GetActiveActorId(CancellationToken cancellationToken)
-    {
-        if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
-        {
-            throw new UnauthorizedAccessException("Usuario no autenticado.");
-        }
-
-        var actorId = _currentUserService.UserId.Value;
-        var isActiveActor = await _context.Users.AnyAsync(
-            user => user.Id == actorId && user.IsActive && !user.IsDeleted,
-            cancellationToken);
-
-        if (!isActiveActor)
-        {
-            throw new UnauthorizedAccessException("Usuario no autenticado.");
-        }
-
-        return actorId;
     }
 }

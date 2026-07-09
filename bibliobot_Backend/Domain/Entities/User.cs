@@ -20,5 +20,4 @@ public class User : SoftDeletableEntity
     public ICollection<ChatConversation> ChatConversations { get; set; } = [];
     public ICollection<ChatLog> ChatLogs { get; set; } = [];
     public ICollection<UserFavoriteBook> UserFavoriteBooks { get; set; } = [];
-    public ICollection<BookReview> BookReviews { get; set; } = [];
 }
