@@ -1,14 +1,13 @@
-using System;
-using Application.Common.DTOs;
+﻿using Application.Common.DTOs;
 using Application.Common.Interfaces;
+using Application.Common.Text;
 using Application.Features.Lookups.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Lookups.SearchBooks;
 
-public sealed class SearchBooksLookupQueryHandler
-    : IRequestHandler<SearchBooksLookupQuery, PagedResult<LookupBookDto>>
+public sealed class SearchBooksLookupQueryHandler : IRequestHandler<SearchBooksLookupQuery, PagedResult<LookupBookDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -17,77 +16,75 @@ public sealed class SearchBooksLookupQueryHandler
         _context = context;
     }
 
-    public async Task<PagedResult<LookupBookDto>> Handle(
-        SearchBooksLookupQuery request,
-        CancellationToken cancellationToken)
+    public async Task<PagedResult<LookupBookDto>> Handle(SearchBooksLookupQuery request, CancellationToken cancellationToken)
     {
-        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
-        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var normalizedQuery = TextSearchNormalizer.Normalize(request.Q);
+        var normalizedIsbn = TextSearchNormalizer.Normalize(request.Isbn);
 
-        if (pageSize > 50)
+        var candidates = await _context.Books
+            .AsNoTracking()
+            .Where(book => book.IsActive && !book.IsDeleted)
+            .Select(book => new BookLookupSearchCandidate(
+                new LookupBookDto
+                {
+                    Id = book.Id,
+                    Label = book.Isbn == null ? book.Title : book.Title + " (" + book.Isbn + ")",
+                    Title = book.Title,
+                    Isbn = book.Isbn,
+                    Price = book.Price,
+                    PublisherName = book.Publisher != null ? book.Publisher.Name : null,
+                    Authors = book.BookAuthors
+                        .Select(bookAuthor => bookAuthor.Author.FullName)
+                        .OrderBy(authorName => authorName)
+                        .ToList(),
+                    Categories = book.BookCategories
+                        .Select(bookCategory => bookCategory.Category.Name)
+                        .OrderBy(categoryName => categoryName)
+                        .ToList(),
+                    TotalStock = book.InventoryStocks.Sum(stock => stock.CurrentStock),
+                    IsActive = book.IsActive
+                },
+                book.Description))
+            .ToListAsync(cancellationToken);
+
+        IEnumerable<BookLookupSearchCandidate> filteredCandidates = candidates;
+
+        if (!string.IsNullOrWhiteSpace(normalizedQuery))
         {
-            pageSize = 50;
+            filteredCandidates = filteredCandidates.Where(candidate => MatchesBook(candidate, normalizedQuery));
         }
 
-        var query = _context.Books.AsNoTracking()
-            .Where(book => !book.IsDeleted && book.IsActive);
-
-        var q = request.Q?.Trim();
-        if (!string.IsNullOrWhiteSpace(q))
+        if (!string.IsNullOrWhiteSpace(normalizedIsbn))
         {
-            var normalized = q!.ToUpperInvariant();
-            query = query.Where(book =>
-                book.Title.ToUpper().Contains(normalized) ||
-                (book.Isbn != null && book.Isbn.ToUpper().Contains(normalized)) ||
-                (book.Description != null && book.Description.ToUpper().Contains(normalized)));
+            filteredCandidates = filteredCandidates.Where(candidate =>
+                TextSearchNormalizer.ContainsNormalized(candidate.Item.Isbn, normalizedIsbn));
         }
 
-        var isbn = request.Isbn?.Trim();
-        if (!string.IsNullOrWhiteSpace(isbn))
-        {
-            var normalizedIsbn = isbn!.ToUpperInvariant();
-            query = query.Where(book =>
-                book.Isbn != null && book.Isbn.ToUpper().Contains(normalizedIsbn));
-        }
+        var filteredItems = filteredCandidates
+            .OrderBy(candidate => candidate.Item.Title)
+            .Select(candidate => candidate.Item)
+            .ToList();
 
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        var items = await query
-            .OrderByDescending(book => book.CreatedAt)
+        var totalCount = filteredItems.Count;
+        var items = filteredItems
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
-            .Select(book => new LookupBookDto
-            {
-                Id = book.Id,
-                Label = BuildLabel(book.Title, book.Isbn),
-                Title = book.Title,
-                Isbn = book.Isbn,
-                Price = book.Price,
-                PublisherName = book.Publisher != null ? book.Publisher.Name : null,
-                Authors = book.BookAuthors
-                    .Select(author => author.Author.FullName)
-                    .Distinct()
-                    .ToList(),
-                Categories = book.BookCategories
-                    .Select(category => category.Category.Name)
-                    .Distinct()
-                    .ToList(),
-                TotalStock = book.InventoryStocks.Sum(stock => stock.CurrentStock),
-                IsActive = book.IsActive,
-            })
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return new PagedResult<LookupBookDto>(items, pageNumber, pageSize, totalCount);
     }
 
-    private static string BuildLabel(string title, string? isbn)
+    private static bool MatchesBook(BookLookupSearchCandidate candidate, string normalizedQuery)
     {
-        if (string.IsNullOrWhiteSpace(isbn))
-        {
-            return title;
-        }
-
-        return $"{title} - ISBN {isbn}";
+        return TextSearchNormalizer.ContainsNormalized(candidate.Item.Title, normalizedQuery)
+            || TextSearchNormalizer.ContainsNormalized(candidate.Item.Isbn, normalizedQuery)
+            || TextSearchNormalizer.ContainsNormalized(candidate.Description, normalizedQuery)
+            || TextSearchNormalizer.ContainsNormalized(candidate.Item.PublisherName, normalizedQuery)
+            || candidate.Item.Authors.Any(authorName => TextSearchNormalizer.ContainsNormalized(authorName, normalizedQuery))
+            || candidate.Item.Categories.Any(categoryName => TextSearchNormalizer.ContainsNormalized(categoryName, normalizedQuery));
     }
-}
 
+    private sealed record BookLookupSearchCandidate(LookupBookDto Item, string? Description);
+}

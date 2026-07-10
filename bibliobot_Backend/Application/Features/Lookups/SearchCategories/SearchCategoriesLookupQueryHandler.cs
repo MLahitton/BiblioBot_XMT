@@ -1,13 +1,13 @@
-using Application.Common.DTOs;
+﻿using Application.Common.DTOs;
 using Application.Common.Interfaces;
+using Application.Common.Text;
 using Application.Features.Lookups.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Lookups.SearchCategories;
 
-public sealed class SearchCategoriesLookupQueryHandler
-    : IRequestHandler<SearchCategoriesLookupQuery, PagedResult<LookupCategoryDto>>
+public sealed class SearchCategoriesLookupQueryHandler : IRequestHandler<SearchCategoriesLookupQuery, PagedResult<LookupCategoryDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -16,43 +16,36 @@ public sealed class SearchCategoriesLookupQueryHandler
         _context = context;
     }
 
-    public async Task<PagedResult<LookupCategoryDto>> Handle(
-        SearchCategoriesLookupQuery request,
-        CancellationToken cancellationToken)
+    public async Task<PagedResult<LookupCategoryDto>> Handle(SearchCategoriesLookupQuery request, CancellationToken cancellationToken)
     {
-        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
-        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var normalizedQuery = TextSearchNormalizer.Normalize(request.Q);
 
-        if (pageSize > 50)
-        {
-            pageSize = 50;
-        }
-
-        var query = _context.Categories.AsNoTracking();
-
-        var q = request.Q?.Trim();
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var normalized = q!.ToUpperInvariant();
-            query = query.Where(category => category.Name.ToUpper().Contains(normalized));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        var items = await query
-            .OrderBy(category => category.Name)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+        var categories = await _context.Categories
+            .AsNoTracking()
+            .Where(category => category.IsActive)
             .Select(category => new LookupCategoryDto
             {
                 Id = category.Id,
-                Name = category.Name,
                 Label = category.Name,
-                IsActive = category.IsActive,
+                Name = category.Name,
+                IsActive = category.IsActive
             })
             .ToListAsync(cancellationToken);
+
+        var filteredCategories = categories
+            .Where(category => string.IsNullOrWhiteSpace(normalizedQuery)
+                || TextSearchNormalizer.ContainsNormalized(category.Name, normalizedQuery))
+            .OrderBy(category => category.Name)
+            .ToList();
+
+        var totalCount = filteredCategories.Count;
+        var items = filteredCategories
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
 
         return new PagedResult<LookupCategoryDto>(items, pageNumber, pageSize, totalCount);
     }
 }
-

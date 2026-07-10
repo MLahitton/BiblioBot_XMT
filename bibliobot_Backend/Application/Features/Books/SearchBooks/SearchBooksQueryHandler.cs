@@ -1,5 +1,6 @@
-using Application.Common.DTOs;
+﻿using Application.Common.DTOs;
 using Application.Common.Interfaces;
+using Application.Common.Text;
 using Application.Features.Books.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -17,38 +18,18 @@ public sealed class SearchBooksQueryHandler : IRequestHandler<SearchBooksQuery, 
 
     public async Task<PagedResult<BookListItemDto>> Handle(SearchBooksQuery request, CancellationToken cancellationToken)
     {
-        var normalizedQuery = request.Query.Trim();
-        if (normalizedQuery.Length < 2)
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var normalizedQuery = TextSearchNormalizer.Normalize(request.Query);
+
+        if (string.IsNullOrWhiteSpace(normalizedQuery))
         {
-            throw new ArgumentException("El criterio de búsqueda debe tener al menos 2 caracteres.");
+            return new PagedResult<BookListItemDto>([], pageNumber, pageSize, 0);
         }
 
-        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
-        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
-
-        if (pageSize > 100)
-        {
-            pageSize = 100;
-        }
-
-        var normalizedQueryLower = normalizedQuery.ToLower();
-
-        var query = _context.Books.AsNoTracking()
+        var candidates = await _context.Books
+            .AsNoTracking()
             .Where(book => book.IsActive && !book.IsDeleted)
-            .Where(book =>
-                book.Title.ToLower().Contains(normalizedQueryLower) ||
-                (book.Isbn != null && book.Isbn.ToLower().Contains(normalizedQueryLower)) ||
-                book.BookAuthors.Any(author => author.Author.FullName.ToLower().Contains(normalizedQueryLower)) ||
-                book.BookCategories.Any(category => category.Category.Name.ToLower().Contains(normalizedQueryLower)) ||
-                (book.Publisher != null && book.Publisher.Name.ToLower().Contains(normalizedQueryLower))
-            );
-
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        var items = await query
-            .OrderBy(book => book.Title)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
             .Select(book => new BookListItemDto
             {
                 Id = book.Id,
@@ -56,21 +37,43 @@ public sealed class SearchBooksQueryHandler : IRequestHandler<SearchBooksQuery, 
                 Isbn = book.Isbn,
                 PublisherName = book.Publisher != null ? book.Publisher.Name : null,
                 Price = book.Price,
-                AverageRating = book.BookReviews.Any(review => review.User.IsActive && !review.User.IsDeleted)
-                    ? book.BookReviews
-                        .Where(review => review.User.IsActive && !review.User.IsDeleted)
-                        .Average(review => review.Rating)
-                    : 0,
-                ReviewCount = book.BookReviews.Count(review => review.User.IsActive && !review.User.IsDeleted),
-                PurchasedCount = book.SaleDetails.Sum(detail => detail.Quantity),
+                AverageRating = book.BookReviews.Any() ? book.BookReviews.Average(review => review.Rating) : 0,
+                ReviewCount = book.BookReviews.Count,
+                PurchasedCount = book.SaleDetails.Sum(saleDetail => saleDetail.Quantity),
                 FavoriteCount = book.UserFavoriteBooks.Count,
                 ImageUrl = book.ImageUrl,
-                Authors = book.BookAuthors.Select(author => author.Author.FullName).Distinct().ToList(),
-                Categories = book.BookCategories.Select(category => category.Category.Name).Distinct().ToList(),
-                TotalStock = book.InventoryStocks.Sum(stock => stock.CurrentStock),
+                Authors = book.BookAuthors
+                    .Select(bookAuthor => bookAuthor.Author.FullName)
+                    .OrderBy(authorName => authorName)
+                    .ToList(),
+                Categories = book.BookCategories
+                    .Select(bookCategory => bookCategory.Category.Name)
+                    .OrderBy(categoryName => categoryName)
+                    .ToList(),
+                TotalStock = book.InventoryStocks.Sum(stock => stock.CurrentStock)
             })
             .ToListAsync(cancellationToken);
 
+        var filteredBooks = candidates
+            .Where(book => MatchesBook(book, normalizedQuery))
+            .OrderBy(book => book.Title)
+            .ToList();
+
+        var totalCount = filteredBooks.Count;
+        var items = filteredBooks
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
         return new PagedResult<BookListItemDto>(items, pageNumber, pageSize, totalCount);
+    }
+
+    private static bool MatchesBook(BookListItemDto book, string normalizedQuery)
+    {
+        return TextSearchNormalizer.ContainsNormalized(book.Title, normalizedQuery)
+            || TextSearchNormalizer.ContainsNormalized(book.Isbn, normalizedQuery)
+            || TextSearchNormalizer.ContainsNormalized(book.PublisherName, normalizedQuery)
+            || book.Authors.Any(authorName => TextSearchNormalizer.ContainsNormalized(authorName, normalizedQuery))
+            || book.Categories.Any(categoryName => TextSearchNormalizer.ContainsNormalized(categoryName, normalizedQuery));
     }
 }

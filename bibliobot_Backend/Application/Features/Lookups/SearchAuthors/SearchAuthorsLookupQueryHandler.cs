@@ -1,13 +1,13 @@
-using Application.Common.DTOs;
+﻿using Application.Common.DTOs;
 using Application.Common.Interfaces;
+using Application.Common.Text;
 using Application.Features.Lookups.Common;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Lookups.SearchAuthors;
 
-public sealed class SearchAuthorsLookupQueryHandler
-    : IRequestHandler<SearchAuthorsLookupQuery, PagedResult<LookupAuthorDto>>
+public sealed class SearchAuthorsLookupQueryHandler : IRequestHandler<SearchAuthorsLookupQuery, PagedResult<LookupAuthorDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -16,44 +16,36 @@ public sealed class SearchAuthorsLookupQueryHandler
         _context = context;
     }
 
-    public async Task<PagedResult<LookupAuthorDto>> Handle(
-        SearchAuthorsLookupQuery request,
-        CancellationToken cancellationToken)
+    public async Task<PagedResult<LookupAuthorDto>> Handle(SearchAuthorsLookupQuery request, CancellationToken cancellationToken)
     {
-        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
-        var pageSize = request.PageSize < 1 ? 20 : request.PageSize;
+        var pageNumber = Math.Max(1, request.PageNumber);
+        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var normalizedQuery = TextSearchNormalizer.Normalize(request.Q);
 
-        if (pageSize > 50)
-        {
-            pageSize = 50;
-        }
-
-        var query = _context.Authors.AsNoTracking();
-
-        var q = request.Q?.Trim();
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var normalized = q!.ToUpperInvariant();
-            query = query.Where(author =>
-                author.FullName.ToUpper().Contains(normalized));
-        }
-
-        var totalCount = await query.CountAsync(cancellationToken);
-
-        var items = await query
-            .OrderBy(author => author.FullName)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+        var authors = await _context.Authors
+            .AsNoTracking()
+            .Where(author => author.IsActive)
             .Select(author => new LookupAuthorDto
             {
                 Id = author.Id,
-                FullName = author.FullName,
                 Label = author.FullName,
-                IsActive = author.IsActive,
+                FullName = author.FullName,
+                IsActive = author.IsActive
             })
             .ToListAsync(cancellationToken);
+
+        var filteredAuthors = authors
+            .Where(author => string.IsNullOrWhiteSpace(normalizedQuery)
+                || TextSearchNormalizer.ContainsNormalized(author.FullName, normalizedQuery))
+            .OrderBy(author => author.FullName)
+            .ToList();
+
+        var totalCount = filteredAuthors.Count;
+        var items = filteredAuthors
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
 
         return new PagedResult<LookupAuthorDto>(items, pageNumber, pageSize, totalCount);
     }
 }
-

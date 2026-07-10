@@ -1,7 +1,8 @@
-using System.Threading;
+﻿using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using Application.Common.Interfaces;
+using Application.Common.Text;
 using Domain.Constants;
 using Domain.Entities;
 using Infrastructure.Persistence;
@@ -283,6 +284,8 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await SeedRealCatalogAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SeedInitialInventoryStockAsync(cancellationToken);
 
         adminRole = await _dbContext.Roles
             .FirstOrDefaultAsync(role => role.Code == adminRoleSeed.Code && role.IsActive, cancellationToken);
@@ -430,7 +433,6 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
                     Price = seedBook.Price,
                     IsActive = true,
                     IsDeleted = false,
-                    CreatedAt = now
                 };
 
                 _dbContext.Books.Add(book);
@@ -473,6 +475,190 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
         }
     }
 
+    private async Task SeedInitialInventoryStockAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var branches = await _dbContext.Branches
+            .Where(branch => branch.IsActive)
+            .OrderBy(branch => branch.Name)
+            .ToListAsync(cancellationToken);
+
+        if (branches.Count == 0)
+        {
+            var centralBranch = new Branch
+            {
+                Name = "Sede Central",
+                Address = "Sede principal de BiblioBot",
+                IsActive = true,
+            };
+
+            _dbContext.Branches.Add(centralBranch);
+            branches.Add(centralBranch);
+        }
+
+        var stockBranches = branches
+            .Take(Math.Min(3, branches.Count))
+            .ToList();
+
+        var books = await _dbContext.Books
+            .Include(book => book.BookCategories)
+                .ThenInclude(bookCategory => bookCategory.Category)
+            .Include(book => book.InventoryStocks)
+            .Where(book => book.IsActive && !book.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var booksByTitle = books
+            .GroupBy(book => NormalizeKey(book.Title))
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var seedBook in RealCatalogSeedData.Books)
+        {
+            var bookKey = NormalizeKey(seedBook.Title);
+
+            if (!booksByTitle.TryGetValue(bookKey, out var book))
+            {
+                continue;
+            }
+
+            var targetStock = ResolveInitialStock(seedBook);
+            var minimumStock = ResolveMinimumStock(targetStock);
+
+            foreach (var (branch, quantity) in BuildStockAllocation(stockBranches, targetStock))
+            {
+                var existingStock = book.InventoryStocks.FirstOrDefault(stock => stock.BranchId == branch.Id);
+
+                if (existingStock is null)
+                {
+                    _dbContext.InventoryStocks.Add(new InventoryStock
+                    {
+                        BookId = book.Id,
+                        BranchId = branch.Id,
+                        CurrentStock = quantity,
+                        MinStock = minimumStock,
+                    });
+
+                    continue;
+                }
+
+                var wasUpdated = false;
+
+                if (existingStock.CurrentStock <= 0)
+                {
+                    existingStock.CurrentStock = quantity;
+                    wasUpdated = true;
+                }
+
+                if (existingStock.MinStock <= 0)
+                {
+                    existingStock.MinStock = minimumStock;
+                    wasUpdated = true;
+                }
+
+                if (wasUpdated)
+                {
+                    existingStock.UpdatedAt = now;
+                }
+            }
+        }
+    }
+
+    private static int ResolveInitialStock(RealCatalogBookSeed seedBook)
+    {
+        var title = NormalizeKey(seedBook.Title);
+        var categories = seedBook.Categories
+            .Select(NormalizeKey)
+            .ToList();
+
+        if (title.Contains("harry potter", StringComparison.Ordinal))
+        {
+            return 18;
+        }
+
+        if (title.Contains("el hobbit", StringComparison.Ordinal))
+        {
+            return 15;
+        }
+
+        if (title.Contains("el senor de los anillos", StringComparison.Ordinal))
+        {
+            return 12;
+        }
+
+        if (title.Contains("clean code", StringComparison.Ordinal))
+        {
+            return 8;
+        }
+
+        if (title.Contains("cien anos de soledad", StringComparison.Ordinal))
+        {
+            return 14;
+        }
+
+        if (categories.Any(category => category.Contains("fantasia", StringComparison.Ordinal)
+            || category.Contains("juvenil", StringComparison.Ordinal)
+            || category.Contains("infantil", StringComparison.Ordinal)))
+        {
+            return 14;
+        }
+
+        if (categories.Any(category => category.Contains("programacion", StringComparison.Ordinal)
+            || category.Contains("ingenieria", StringComparison.Ordinal)
+            || category.Contains("arquitectura", StringComparison.Ordinal)
+            || category.Contains("algoritmos", StringComparison.Ordinal)
+            || category.Contains("tecnologia", StringComparison.Ordinal)))
+        {
+            return 8;
+        }
+
+        if (categories.Any(category => category.Contains("literatura clasica", StringComparison.Ordinal)
+            || category.Contains("novela", StringComparison.Ordinal)))
+        {
+            return 10;
+        }
+
+        if (categories.Any(category => category.Contains("psicologia", StringComparison.Ordinal)
+            || category.Contains("desarrollo", StringComparison.Ordinal)
+            || category.Contains("filosofia", StringComparison.Ordinal)
+            || category.Contains("ensayo", StringComparison.Ordinal)))
+        {
+            return 8;
+        }
+
+        return 10;
+    }
+
+    private static int ResolveMinimumStock(int targetStock)
+    {
+        return Math.Max(2, targetStock / 4);
+    }
+
+    private static IReadOnlyCollection<(Branch Branch, int Quantity)> BuildStockAllocation(
+        IReadOnlyList<Branch> branches,
+        int targetStock)
+    {
+        if (branches.Count == 0)
+        {
+            return [];
+        }
+
+        if (branches.Count == 1)
+        {
+            return [(branches[0], targetStock)];
+        }
+
+        if (branches.Count == 2)
+        {
+            var firstQuantity = Math.Max(1, targetStock * 60 / 100);
+            return [(branches[0], firstQuantity), (branches[1], targetStock - firstQuantity)];
+        }
+
+        var centralQuantity = Math.Max(1, targetStock * 50 / 100);
+        var secondaryQuantity = Math.Max(1, targetStock * 30 / 100);
+        var tertiaryQuantity = Math.Max(1, targetStock - centralQuantity - secondaryQuantity);
+
+        return [(branches[0], centralQuantity), (branches[1], secondaryQuantity), (branches[2], tertiaryQuantity)];
+    }
     private Author EnsureAuthor(
         string authorName,
         IDictionary<string, Author> authorsByName,
@@ -495,7 +681,6 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
         {
             FullName = authorName.Trim(),
             IsActive = true,
-            CreatedAt = now
         };
 
         _dbContext.Authors.Add(author);
@@ -526,7 +711,6 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
         {
             Name = categoryName.Trim(),
             IsActive = true,
-            CreatedAt = now
         };
 
         _dbContext.Categories.Add(category);
@@ -557,7 +741,6 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
         {
             Name = publisherName.Trim(),
             IsActive = true,
-            CreatedAt = now
         };
 
         _dbContext.Publishers.Add(publisher);
@@ -630,6 +813,11 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
 
     private static string NormalizeKey(string value)
     {
-        return value.Trim().ToUpperInvariant();
+        return TextSearchNormalizer.Normalize(value);
     }
 }
+
+
+
+
+
