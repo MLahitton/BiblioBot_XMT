@@ -755,10 +755,160 @@ def _extract_quantity(message: str) -> int | None:
 
 def _find_book_from_message(message: str, tool_service: BiblioBotToolService) -> dict | None:
     normalized = _normalize(message)
-    for book in tool_service.mock_client.search_books():
-        if _normalize(book["id"]) in normalized or _normalize(book["title"]) in normalized:
+    candidate_queries = _extract_book_lookup_queries(message)
+
+    for query in candidate_queries:
+        books = tool_service.mock_client.search_books(query)
+        book = _select_best_book_match(books, normalized, candidate_queries)
+
+        if book:
             return tool_service.mock_client.get_book_detail(book["id"])
+
+    books = tool_service.mock_client.search_books()
+    book = _select_best_book_match(books, normalized, candidate_queries)
+
+    if book:
+        return tool_service.mock_client.get_book_detail(book["id"])
+
     return None
+
+
+def _extract_book_lookup_queries(message: str) -> list[str]:
+    normalized = _normalize(message)
+    candidates: list[str] = []
+
+    intent_patterns = [
+        r"\b(?:ver|mostrar|muestrame)\s+(?:el\s+|la\s+|un\s+|una\s+)?(?:libro|libros)\s+",
+        r"\b(?:detalle|detalles|informacion)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?(?:libro|libros)?\s*",
+        r"\b(?:hay\s+)?(?:stock|disponibilidad|disponible|existencias)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?",
+        r"\b(?:quiero\s+)?(?:comprar|compra|llevar|agrega|agregar|anade|anadir)\s+",
+        r"\b(?:registrar|crear|solicitud)\s+(?:entrada|traslado|compra|de compra)\s+(?:de|del)?\s*",
+    ]
+
+    for pattern in intent_patterns:
+        candidate = re.sub(pattern, " ", normalized).strip()
+        _add_book_lookup_candidate(candidates, candidate)
+
+    stop_words = {
+        "ver",
+        "libro",
+        "libros",
+        "detalle",
+        "detalles",
+        "informacion",
+        "muestrame",
+        "mostrar",
+        "quiero",
+        "de",
+        "del",
+        "el",
+        "la",
+        "un",
+        "una",
+        "hay",
+        "stock",
+        "disponible",
+        "disponibilidad",
+        "existencias",
+        "comprar",
+        "compra",
+        "llevar",
+        "agrega",
+        "agregar",
+        "anade",
+        "anadir",
+        "carrito",
+        "registrar",
+        "entrada",
+        "crear",
+        "traslado",
+        "solicitud",
+        "para",
+        "en",
+        "desde",
+        "hacia",
+        "a",
+        "sede",
+        "norte",
+        "sur",
+        "centro",
+        "central",
+    }
+    words = [
+        word
+        for word in normalized.split()
+        if word not in stop_words and not re.fullmatch(r"x?-?\d+", word)
+    ]
+    _add_book_lookup_candidate(candidates, " ".join(words))
+    _add_book_lookup_candidate(candidates, normalized)
+
+    return candidates
+
+
+def _add_book_lookup_candidate(candidates: list[str], value: str | None) -> None:
+    if not value:
+        return
+
+    candidate = " ".join(
+        word
+        for word in _normalize(value).split()
+        if not re.fullmatch(r"x?-?\d+", word)
+    )
+
+    if len(candidate) < 2 or candidate in candidates:
+        return
+
+    candidates.append(candidate)
+
+
+def _select_best_book_match(
+    books: list[dict],
+    normalized_message: str,
+    candidate_queries: list[str],
+) -> dict | None:
+    valid_books = [book for book in books if isinstance(book, dict) and book.get("id") and book.get("title")]
+
+    if not valid_books:
+        return None
+
+    for book in valid_books:
+        if _normalize(str(book.get("id", ""))) in normalized_message:
+            return book
+
+    for book in valid_books:
+        title = _normalize(str(book.get("title", "")))
+
+        if title and title in normalized_message:
+            return book
+
+    for query in candidate_queries:
+        for book in valid_books:
+            title = _normalize(str(book.get("title", "")))
+
+            if title == query or query in title or title in query:
+                return book
+
+    if len(valid_books) == 1 and _book_is_relevant(valid_books[0], normalized_message, candidate_queries):
+        return valid_books[0]
+
+    return None
+
+
+def _book_is_relevant(book: dict, normalized_message: str, candidate_queries: list[str]) -> bool:
+    title = _normalize(str(book.get("title", "")))
+    author = _normalize(str(book.get("author", "")))
+    genre = _normalize(str(book.get("genre", "")))
+    authors = _normalize(_join_book_values(book.get("authors")))
+    categories = _normalize(_join_book_values(book.get("categories")))
+    searchable_text = " ".join([title, author, genre, authors, categories]).strip()
+
+    if not searchable_text:
+        return False
+
+    if title and title in normalized_message:
+        return True
+
+    return any(query and (query in searchable_text or searchable_text in query) for query in candidate_queries)
 
 
 def _enrich_purchase_pending_result(result: dict[str, Any], book: dict, quantity: int) -> dict[str, Any]:

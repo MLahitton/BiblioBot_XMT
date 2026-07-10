@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.graph import ChatGraphService, build_chat_graph
-from app.graph.nodes import _catalog_result_state, final_safety_node
+from app.graph.nodes import _catalog_result_state, _find_book_from_message, final_safety_node
 from app.main import app
 from app.schemas.chat_contract import ChatLink, ChatProcessRequest, ChatProcessResponse
 from app.services import ConfirmationService, LlmAssistantService, PermissionService
@@ -28,6 +28,48 @@ class FakeGeminiClient:
 class RaisingGraph:
     def invoke(self, state):
         raise RuntimeError("graph failure")
+
+
+class FakePagedRealClient:
+    def __init__(self):
+        self.queries = []
+        self.books = {
+            "real-hobbit": {
+                "id": "real-hobbit",
+                "title": "El Hobbit",
+                "author": "J. R. R. Tolkien",
+                "genre": "Fantasía",
+                "price": 50000,
+                "available": True,
+            },
+            "real-harry": {
+                "id": "real-harry",
+                "title": "Harry Potter y la piedra filosofal",
+                "author": "J. K. Rowling",
+                "genre": "Fantasía",
+                "price": 52000,
+                "available": True,
+            },
+        }
+
+    def search_books(self, query: str | None = None):
+        self.queries.append(query)
+
+        if query is None:
+            return [{"id": "other-book", "title": "Alicia en el país de las maravillas"}]
+
+        normalized_query = query.lower()
+
+        if "hobbit" in normalized_query:
+            return [self.books["real-hobbit"]]
+
+        if "harry potter" in normalized_query:
+            return [self.books["real-harry"]]
+
+        return []
+
+    def get_book_detail(self, book_id: str):
+        return self.books.get(book_id)
 
 
 def request(message: str, **overrides) -> ChatProcessRequest:
@@ -170,6 +212,21 @@ def test_book_detail_found_returns_product_navigation_and_link():
     assert response.context.selectedBookId == "book-003"
     assert response.links[0].url == "/books/python-practico-book-003"
     assert response.links[0].type == "BOOK_DETAIL"
+
+
+def test_find_book_from_message_uses_specific_query_before_unpaged_fallback():
+    client = FakePagedRealClient()
+    service = BiblioBotToolService(mock_client=client)
+
+    hobbit = _find_book_from_message("ver libro El Hobbit", service)
+    harry = _find_book_from_message("detalle de Harry Potter", service)
+    stock = _find_book_from_message("hay stock de El Hobbit", service)
+
+    assert hobbit["title"] == "El Hobbit"
+    assert harry["title"] == "Harry Potter y la piedra filosofal"
+    assert stock["title"] == "El Hobbit"
+    assert client.queries[0] == "el hobbit"
+    assert None not in client.queries[:3]
 
 
 def test_book_detail_without_identifier_asks_clarification():
