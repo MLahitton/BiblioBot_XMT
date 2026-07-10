@@ -22,6 +22,7 @@ public sealed class FastApiChatbotClient : IChatbotClient
         _options = options.Value;
         _jsonSerializerOptions = new JsonSerializerOptions
         {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             PropertyNameCaseInsensitive = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
