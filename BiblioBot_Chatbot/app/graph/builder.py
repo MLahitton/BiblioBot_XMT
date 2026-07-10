@@ -30,7 +30,7 @@ def build_chat_graph(
     graph.add_node("confirmation_control", make_confirmation_control_node(confirmation_service))
     graph.add_node("intent_detection", make_intent_detection_node(permission_service, llm_assistant_service))
     graph.add_node("permission_check", make_permission_check_node(permission_service))
-    graph.add_node("tool_dispatch", make_tool_dispatch_node(tool_service))
+    graph.add_node("tool_dispatch", make_tool_dispatch_node(tool_service, confirmation_service))
     graph.add_node("response_builder", make_response_builder_node(llm_assistant_service))
     graph.add_node("final_safety", final_safety_node)
 

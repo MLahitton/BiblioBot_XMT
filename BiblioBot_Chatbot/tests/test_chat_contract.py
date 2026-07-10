@@ -771,7 +771,7 @@ def test_out_of_domain_question_needs_clarification():
 
 
 def test_confirmation_without_pending_action_needs_clarification():
-    payload = build_payload("si confirmo")
+    payload = build_payload("si confirmo", sessionId="contract-confirmation-empty-session")
 
     response = client.post("/chat/process", json=payload)
 

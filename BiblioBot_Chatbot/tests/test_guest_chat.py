@@ -198,8 +198,8 @@ def test_authenticated_user_with_invoice_permission_can_query_mock_invoice():
 
 
 def test_confirm_and_cancel_regressions_stay_safe_with_guest_contract():
-    confirmation = post_chat("si confirmo")
-    cancellation = post_chat("cancelar")
+    confirmation = post_chat("si confirmo", sessionId="guest-confirmation-empty-session")
+    cancellation = post_chat("cancelar", sessionId="guest-cancellation-empty-session")
 
     assert confirmation["state"] == "NEEDS_CLARIFICATION"
     assert confirmation["context"]["nextAction"] == "ASK_ACTION_DETAILS"

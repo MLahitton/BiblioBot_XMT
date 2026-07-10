@@ -129,15 +129,28 @@ def make_confirmation_control_node(
 ) -> Callable[[ChatGraphState], ChatGraphState]:
     def confirmation_control_node(state: ChatGraphState) -> ChatGraphState:
         message = state.get("message", "")
+        session_id = state.get("session_id", "")
         if confirmation_service.is_explicit_cancellation(message):
+            pending_action = confirmation_service.consume_pending_action(session_id)
+            metadata_extra = {}
+            if pending_action:
+                metadata_extra = {
+                    "originalIntent": pending_action.get("originalIntent") or pending_action.get("intent"),
+                    "actionRef": pending_action.get("actionRef"),
+                    "cancelledAction": pending_action,
+                }
             return _terminal_response(
                 state,
                 response="Listo, cancele la accion pendiente. No se realizo ningun cambio.",
                 chat_state=ChatState.IDLE,
                 intent="cancel_confirmation",
                 next_action="WAITING_USER_MESSAGE",
+                metadata_extra=metadata_extra,
             )
         if confirmation_service.is_explicit_confirmation(message):
+            pending_action = confirmation_service.consume_pending_action(session_id)
+            if pending_action:
+                return _confirmed_pending_action_response(state, pending_action)
             return _terminal_response(
                 state,
                 response="Aun no tengo una accion pendiente para confirmar. Dime primero que necesitas hacer.",
@@ -190,7 +203,10 @@ def make_permission_check_node(permission_service: PermissionService) -> Callabl
     return permission_check_node
 
 
-def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[ChatGraphState], ChatGraphState]:
+def make_tool_dispatch_node(
+    tool_service: BiblioBotToolService,
+    confirmation_service: ConfirmationService,
+) -> Callable[[ChatGraphState], ChatGraphState]:
     def tool_dispatch_node(state: ChatGraphState) -> ChatGraphState:
         intent = state.get("intent", "unknown")
         context = _tool_context(state)
@@ -261,6 +277,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
                 state,
                 _enrich_purchase_pending_result(result, book, quantity),
                 f"Preparar compra de {quantity} unidad(es) de {book['title']}",
+                confirmation_service,
                 selected_book_id=book["id"],
                 metadata_extra={"bookTitle": book["title"], "quantity": quantity},
             )
@@ -278,7 +295,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
                 ),
                 context,
             )
-            return _pending_confirmation_state(state, result, "Preparar entrada de inventario simulada")
+            return _pending_confirmation_state(state, result, "Preparar entrada de inventario simulada", confirmation_service)
 
         if intent == "transfer_request":
             details = _extract_sensitive_details(message, tool_service, needs_two_branches=True)
@@ -294,7 +311,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
                 ),
                 context,
             )
-            return _pending_confirmation_state(state, result, "Preparar solicitud de traslado simulada")
+            return _pending_confirmation_state(state, result, "Preparar solicitud de traslado simulada", confirmation_service)
 
         if intent == "purchase_request":
             details = _extract_sensitive_details(message, tool_service, require_branch=True)
@@ -309,7 +326,7 @@ def make_tool_dispatch_node(tool_service: BiblioBotToolService) -> Callable[[Cha
                 ),
                 context,
             )
-            return _pending_confirmation_state(state, result, "Preparar solicitud de compra interna simulada")
+            return _pending_confirmation_state(state, result, "Preparar solicitud de compra interna simulada", confirmation_service)
 
         if intent == "general_help":
             return {
@@ -544,6 +561,7 @@ def _pending_confirmation_state(
     state: ChatGraphState,
     result: dict[str, Any],
     summary: str,
+    confirmation_service: ConfirmationService,
     selected_book_id: str | None = None,
     metadata_extra: dict[str, Any] | None = None,
 ) -> ChatGraphState:
@@ -552,6 +570,17 @@ def _pending_confirmation_state(
     context = dict(state.get("context", {}))
     if selected_book_id:
         context["selectedBookId"] = selected_book_id
+    if pending_action:
+        pending_action = {
+            **pending_action,
+            "originalIntent": state.get("intent", pending_action.get("intent")),
+            "actionRef": action_ref or pending_action.get("actionRef"),
+            "summary": summary,
+        }
+        if selected_book_id:
+            pending_action["selectedBookId"] = selected_book_id
+        result = {**result, "pendingAction": pending_action}
+        confirmation_service.store_pending_action(state.get("session_id", ""), pending_action)
     return {
         **state,
         "response": f"Perfecto. Ya tengo preparada esta accion: {summary}. Antes de continuar, necesito que confirmes si deseas realizarla.",
@@ -563,6 +592,42 @@ def _pending_confirmation_state(
         "tool_result": result,
         "context": context,
         "metadata": {**state.get("metadata", {}), **(metadata_extra or {}), "pendingAction": pending_action},
+    }
+
+
+def _confirmed_pending_action_response(state: ChatGraphState, pending_action: dict[str, Any]) -> ChatGraphState:
+    original_intent = pending_action.get("originalIntent") or pending_action.get("intent") or "confirmation"
+    action_ref = pending_action.get("actionRef")
+    confirmed_action = {
+        **pending_action,
+        "status": "CONFIRMED_SAFE_MODE",
+        "realBackendMutationBlocked": True,
+    }
+    return {
+        **state,
+        "response": (
+            "Confirmacion recibida. La accion quedo validada en modo seguro, "
+            "pero no se ejecuto una compra real porque las mutaciones reales estan deshabilitadas."
+        ),
+        "state": ChatState.WAITING_CONFIRMATION.value,
+        "intent": original_intent,
+        "ui_action": UiActionType.NONE.value,
+        "links": [],
+        "next_step": "CONFIRMATION_RECEIVED_MUTATION_BLOCKED",
+        "requires_confirmation": False,
+        "action_ref": action_ref,
+        "pending_action": None,
+        "tool_result": None,
+        "context": {**state.get("context", {}), "selectedBookId": pending_action.get("selectedBookId")},
+        "metadata": {
+            **state.get("metadata", {}),
+            "detectedIntent": original_intent,
+            "originalIntent": original_intent,
+            "actionRef": action_ref,
+            "confirmedAction": confirmed_action,
+            "realBackendMutationBlocked": True,
+        },
+        "is_terminal": True,
     }
 
 

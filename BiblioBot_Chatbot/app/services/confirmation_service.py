@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import unicodedata
 
@@ -30,6 +31,9 @@ class ConfirmationService:
         "anular",
     }
 
+    def __init__(self):
+        self.pending_actions_by_session: dict[str, dict] = {}
+
     def requires_confirmation(self, intent: str) -> bool:
         return intent in self.CONFIRMATION_REQUIRED_INTENTS
 
@@ -60,6 +64,34 @@ class ConfirmationService:
             "mockOnly": True,
         }
 
+    def store_pending_action(self, session_id: str, pending_action: dict | None) -> None:
+        session_key = self._session_key(session_id)
+        if not session_key or not pending_action:
+            return
+
+        self.pending_actions_by_session[session_key] = copy.deepcopy(pending_action)
+
+    def get_pending_action(self, session_id: str) -> dict | None:
+        session_key = self._session_key(session_id)
+        if not session_key:
+            return None
+
+        pending_action = self.pending_actions_by_session.get(session_key)
+        return copy.deepcopy(pending_action) if pending_action else None
+
+    def consume_pending_action(self, session_id: str) -> dict | None:
+        session_key = self._session_key(session_id)
+        if not session_key:
+            return None
+
+        pending_action = self.pending_actions_by_session.pop(session_key, None)
+        return copy.deepcopy(pending_action) if pending_action else None
+
+    def clear_pending_action(self, session_id: str) -> None:
+        session_key = self._session_key(session_id)
+        if session_key:
+            self.pending_actions_by_session.pop(session_key, None)
+
     def _normalize(self, value: str) -> str:
         without_accents = "".join(
             char
@@ -67,3 +99,6 @@ class ConfirmationService:
             if unicodedata.category(char) != "Mn"
         )
         return " ".join(without_accents.split())
+
+    def _session_key(self, session_id: str) -> str:
+        return " ".join(str(session_id or "").split())

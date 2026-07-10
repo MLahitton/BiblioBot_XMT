@@ -345,6 +345,162 @@ def test_purchase_intent_extracts_quantity_and_book_for_confirmation():
     assert "invoice" not in response.context.metadata
 
 
+def test_purchase_pending_action_is_stored_by_session():
+    confirmation_service = ConfirmationService()
+    service = ChatGraphService(
+        confirmation_service=confirmation_service,
+        llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)),
+    )
+
+    response = service.process(
+        request(
+            "quiero comprar 2 Python Practico",
+            sessionId="purchase-session-store",
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+    pending_action = confirmation_service.get_pending_action("purchase-session-store")
+
+    assert response.state == "WAITING_CONFIRMATION"
+    assert response.context.intent == "purchase_intent"
+    assert response.context.requiresConfirmation is True
+    assert response.context.actionRef
+    assert response.context.metadata["pendingAction"]
+    assert pending_action
+    assert pending_action["actionRef"] == response.context.actionRef
+    assert pending_action["originalIntent"] == "purchase_intent"
+
+
+def test_explicit_confirmation_consumes_existing_pending_action():
+    confirmation_service = ConfirmationService()
+    service = ChatGraphService(
+        confirmation_service=confirmation_service,
+        llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)),
+    )
+    session_id = "purchase-session-confirm"
+
+    purchase = service.process(
+        request(
+            "quiero comprar 2 Python Practico",
+            sessionId=session_id,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+    confirmation = service.process(
+        request(
+            "si confirmo",
+            sessionId=session_id,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+
+    assert purchase.state == "WAITING_CONFIRMATION"
+    assert confirmation.state == "WAITING_CONFIRMATION"
+    assert "Aun no tengo una accion pendiente" not in confirmation.response
+    assert confirmation.context.intent == "purchase_intent"
+    assert confirmation.context.nextAction == "CONFIRMATION_RECEIVED_MUTATION_BLOCKED"
+    assert confirmation.context.metadata["originalIntent"] == "purchase_intent"
+    assert confirmation.context.metadata["actionRef"] == purchase.context.actionRef
+    assert confirmation.context.metadata["confirmedAction"]["status"] == "CONFIRMED_SAFE_MODE"
+    assert confirmation.context.metadata["realBackendMutationBlocked"] is True
+    assert confirmation_service.get_pending_action(session_id) is None
+
+
+def test_confirmation_without_pending_action_still_needs_clarification_for_new_session():
+    service = ChatGraphService(llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)))
+
+    response = service.process(
+        request(
+            "si confirmo",
+            sessionId="purchase-session-empty",
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+
+    assert response.state == "NEEDS_CLARIFICATION"
+    assert response.context.intent == "confirmation_without_pending_action"
+    assert "Aun no tengo una accion pendiente" in response.response
+
+
+def test_cancellation_clears_pending_action():
+    confirmation_service = ConfirmationService()
+    service = ChatGraphService(
+        confirmation_service=confirmation_service,
+        llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)),
+    )
+    session_id = "purchase-session-cancel"
+
+    purchase = service.process(
+        request(
+            "quiero comprar 2 Python Practico",
+            sessionId=session_id,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+    cancellation = service.process(
+        request(
+            "cancelar",
+            sessionId=session_id,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+    confirmation = service.process(
+        request(
+            "si confirmo",
+            sessionId=session_id,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+
+    assert purchase.state == "WAITING_CONFIRMATION"
+    assert cancellation.state == "IDLE"
+    assert cancellation.context.intent == "cancel_confirmation"
+    assert confirmation_service.get_pending_action(session_id) is None
+    assert confirmation.state == "NEEDS_CLARIFICATION"
+    assert confirmation.context.intent == "confirmation_without_pending_action"
+
+
+def test_pending_actions_are_isolated_by_session():
+    confirmation_service = ConfirmationService()
+    service = ChatGraphService(
+        confirmation_service=confirmation_service,
+        llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)),
+    )
+
+    session_a = "purchase-session-a"
+    session_b = "purchase-session-b"
+    purchase = service.process(
+        request(
+            "quiero comprar 2 Python Practico",
+            sessionId=session_a,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+    wrong_session_confirmation = service.process(
+        request(
+            "si confirmo",
+            sessionId=session_b,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+    pending_session_a = confirmation_service.get_pending_action(session_a)
+    right_session_confirmation = service.process(
+        request(
+            "si confirmo",
+            sessionId=session_a,
+            permissions=["chat.message", "cart.manage", "sales.create"],
+        )
+    )
+
+    assert purchase.state == "WAITING_CONFIRMATION"
+    assert wrong_session_confirmation.state == "NEEDS_CLARIFICATION"
+    assert wrong_session_confirmation.context.intent == "confirmation_without_pending_action"
+    assert pending_session_a
+    assert right_session_confirmation.context.intent == "purchase_intent"
+    assert right_session_confirmation.context.metadata["actionRef"] == purchase.context.actionRef
+    assert confirmation_service.get_pending_action(session_a) is None
+
+
 def test_purchase_intent_extracts_supported_buy_phrases():
     messages = [
         "Comprar 1 Python Practico",
