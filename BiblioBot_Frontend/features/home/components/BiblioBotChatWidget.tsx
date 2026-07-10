@@ -1,46 +1,39 @@
 ﻿"use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { sendChatMessage, resetChatSessionId } from "../services/chat.service";
+import type { ChatbotBookSummary, ChatbotLink, ChatbotResponse } from "../types/chat.types";
 import { useChatContext } from "./ChatContext";
 
 type ChatMessage = {
   id: number;
   author: "bot" | "user";
   text: string;
+  payload?: ChatbotResponse;
+  isError?: boolean;
 };
 
 const initialMessages: ChatMessage[] = [
   {
     id: 1,
     author: "bot",
-    text: "Hola, soy BiblioBot. Puedo ayudarte a encontrar una lectura por categoria, precio o estado de animo.",
+    text: "Hola, soy BiblioBot. Puedo ayudarte a buscar libros, revisar detalles, consultar stock o preparar una compra segura.",
   },
 ];
 
 const quickPrompts = [
-  "Recomiendame ficcion",
-  "Libros para aprender",
-  "Algo para regalar",
+  "Recomiendame libros de fantasia",
+  "Ver libro El Hobbit",
+  "Hay stock de El Hobbit",
 ];
 
-function getBotReply(message: string): string {
-  const normalized = message.toLowerCase();
-
-  if (normalized.includes("ficcion") || normalized.includes("novela")) {
-    return "Te recomiendo empezar por La Ciudad de Papel. Tiene un tono cercano, urbano y es una buena primera compra.";
-  }
-
-  if (normalized.includes("aprender") || normalized.includes("tecnologia")) {
-    return "Para aprender, Codigo Aurora funciona muy bien: es claro, moderno y pensado para entrar en temas digitales sin friccion.";
-  }
-
-  if (normalized.includes("regal")) {
-    return "Para regalo miraria Materia Viva o Galeria Interior. Son opciones cuidadas, bonitas y faciles de recomendar.";
-  }
-
-  return "Puedo ayudarte con recomendaciones, categorias, precios o novedades. Cuentame que tipo de lectura tienes en mente.";
-}
+const priceFormatter = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  maximumFractionDigits: 0,
+});
 
 function CloseIcon() {
   return (
@@ -84,10 +77,13 @@ function ExpandIcon({ isExpanded }: { isExpanded: boolean }) {
 }
 
 export function BiblioBotChatWidget() {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [isSending, setIsSending] = useState(false);
+  const messageIdRef = useRef(initialMessages.length + 1);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const { setIsChatExpanded } = useChatContext();
 
@@ -99,7 +95,7 @@ export function BiblioBotChatWidget() {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ block: "end" });
     }
-  }, [isOpen, messages, isExpanded]);
+  }, [isOpen, messages, isExpanded, isSending]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -112,25 +108,73 @@ export function BiblioBotChatWidget() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const nextMessageId = () => {
+    const nextId = messageIdRef.current;
+    messageIdRef.current += 1;
+    return nextId;
+  };
+
   const closeChat = () => {
     setIsOpen(false);
     setIsExpanded(false);
   };
 
-  const sendMessage = (text: string) => {
+  const restartChat = () => {
+    resetChatSessionId();
+    messageIdRef.current = initialMessages.length + 1;
+    setMessages(initialMessages);
+    setInput("");
+  };
+
+  const navigateTo = (url: string | null | undefined) => {
+    const safeUrl = getSafeInternalPath(url);
+
+    if (safeUrl) {
+      router.push(safeUrl);
+    }
+  };
+
+  const sendMessage = async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+
+    if (!trimmed || isSending) return;
+
     setMessages((currentMessages) => [
       ...currentMessages,
-      { id: currentMessages.length + 1, author: "user", text: trimmed },
-      { id: currentMessages.length + 2, author: "bot", text: getBotReply(trimmed) },
+      { id: nextMessageId(), author: "user", text: trimmed },
     ]);
     setInput("");
+    setIsSending(true);
+
+    try {
+      const result = await sendChatMessage(trimmed);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: nextMessageId(),
+          author: "bot",
+          text: result.response.response,
+          payload: result.response,
+        },
+      ]);
+    } catch (error) {
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: nextMessageId(),
+          author: "bot",
+          text: error instanceof Error ? error.message : "No pude contactar a BiblioBot en este momento.",
+          isError: true,
+        },
+      ]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    sendMessage(input);
+    void sendMessage(input);
   };
 
   const panelClassName = isExpanded
@@ -172,11 +216,20 @@ export function BiblioBotChatWidget() {
                 <p className="truncate text-sm font-black text-foreground">BiblioBot</p>
                 <span className="h-2 w-2 rounded-full bg-accent" />
               </div>
-              <p className="truncate text-xs font-semibold text-muted">En linea</p>
+              <p className="truncate text-xs font-semibold text-muted">
+                {isSending ? "Consultando catalogo" : "En linea"}
+              </p>
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              className="hidden rounded-full border border-border bg-card px-3 py-2 text-[0.65rem] font-black uppercase tracking-widest text-muted transition hover:border-accent/40 hover:text-accent sm:inline-flex"
+              onClick={restartChat}
+            >
+              Nuevo
+            </button>
             <button
               type="button"
               className={`flex h-9 w-9 items-center justify-center rounded-full border text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
@@ -204,15 +257,20 @@ export function BiblioBotChatWidget() {
           {messages.map((message) => (
             <div key={message.id}>
               <div className={`flex ${message.author === "user" ? "justify-end" : "justify-start"}`}>
-                <p
-                  className={`max-w-[82%] px-4 py-3 text-sm font-semibold leading-5 ${
+                <div
+                  className={`max-w-[86%] px-4 py-3 text-sm font-semibold leading-5 ${
                     message.author === "user"
                       ? "rounded-[18px] rounded-br-md bg-foreground text-paper"
-                      : "rounded-[18px] rounded-bl-md bg-card text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]"
+                      : message.isError
+                        ? "rounded-[18px] rounded-bl-md border border-red-200 bg-red-50 text-red-700"
+                        : "rounded-[18px] rounded-bl-md bg-card text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]"
                   }`}
                 >
-                  {message.text}
-                </p>
+                  <p>{message.text}</p>
+                  {message.payload ? (
+                    <ChatResponseActions payload={message.payload} onNavigate={navigateTo} />
+                  ) : null}
+                </div>
               </div>
               {message.id === 1 ? (
                 <div className="mt-3 flex flex-wrap gap-2 pl-2">
@@ -220,8 +278,9 @@ export function BiblioBotChatWidget() {
                     <button
                       key={prompt}
                       type="button"
-                      className="rounded-full border border-border bg-paper px-3 py-2 text-xs font-extrabold text-foreground shadow-sm transition hover:border-accent/40 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      onClick={() => sendMessage(prompt)}
+                      disabled={isSending}
+                      className="rounded-full border border-border bg-paper px-3 py-2 text-xs font-extrabold text-foreground shadow-sm transition hover:border-accent/40 hover:bg-card disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      onClick={() => void sendMessage(prompt)}
                     >
                       {prompt}
                     </button>
@@ -230,6 +289,13 @@ export function BiblioBotChatWidget() {
               ) : null}
             </div>
           ))}
+          {isSending ? (
+            <div className="flex justify-start">
+              <p className="rounded-[18px] rounded-bl-md bg-card px-4 py-3 text-sm font-semibold text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.44)]">
+                BiblioBot esta leyendo el catalogo...
+              </p>
+            </div>
+          ) : null}
           <div ref={messagesEndRef} />
         </div>
 
@@ -245,13 +311,15 @@ export function BiblioBotChatWidget() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Escribe tu pregunta"
-            className="h-11 min-w-0 flex-1 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground outline-none placeholder:text-muted focus:border-accent"
+            disabled={isSending}
+            className="h-11 min-w-0 flex-1 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-70 focus:border-accent"
           />
           <button
             type="submit"
-            className="h-11 rounded-full bg-accent px-4 text-xs font-black text-paper shadow-[0_10px_20px_rgba(255,96,55,0.2)] transition hover:bg-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            disabled={isSending || !input.trim()}
+            className="h-11 rounded-full bg-accent px-4 text-xs font-black text-paper shadow-[0_10px_20px_rgba(255,96,55,0.2)] transition hover:bg-foreground disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            Enviar
+            {isSending ? "..." : "Enviar"}
           </button>
         </form>
       </div>
@@ -278,4 +346,192 @@ export function BiblioBotChatWidget() {
       </button>
     </div>
   );
+}
+
+function ChatResponseActions({
+  payload,
+  onNavigate,
+}: {
+  payload: ChatbotResponse;
+  onNavigate: (url: string | null | undefined) => void;
+}) {
+  const metadata = payload.context.metadata ?? {};
+  const books = Array.isArray(metadata.books) ? metadata.books : [];
+  const book = metadata.book;
+  const stock = metadata.stock;
+  const isAuthRequired = payload.context.intent === "auth_required" || payload.context.nextAction === "AUTH_REQUIRED";
+  const catalogUrl = getCatalogUrl(payload);
+  const productUrl = getProductUrl(payload);
+  const invoiceUrl = getFirstSafeLink(payload.links) ?? getInvoiceUrl(payload);
+  const cartUrl = getFirstSafeLink(payload.links) ?? "/cart";
+
+  return (
+    <div className="mt-3 space-y-3">
+      {books.length > 0 ? <BookSummaryList books={books.slice(0, 4)} /> : null}
+      {book ? <BookDetailSummary book={book} /> : null}
+      {stock ? <StockSummary stock={stock} /> : null}
+
+      {isAuthRequired ? (
+        <div className="flex flex-wrap gap-2">
+          <ActionButton label="Iniciar sesion" url={findLinkUrl(payload.links, "AUTH_LOGIN", "/auth/login")} onNavigate={onNavigate} />
+          <ActionButton label="Crear cuenta" url={findLinkUrl(payload.links, "AUTH_REGISTER", "/auth/register")} onNavigate={onNavigate} />
+        </div>
+      ) : null}
+
+      {payload.uiAction === "NAVIGATE_TO_CATALOG" && catalogUrl ? (
+        <ActionButton label="Ver catalogo" url={catalogUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "NAVIGATE_TO_PRODUCT" && productUrl ? (
+        <ActionButton label="Ver detalle" url={productUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "SHOW_INVOICE" && invoiceUrl ? (
+        <ActionButton label="Ver factura" url={invoiceUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "OPEN_CART" ? (
+        <ActionButton label="Abrir carrito" url={cartUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "APPLY_FILTERS" && catalogUrl ? (
+        <ActionButton label="Aplicar filtros" url={catalogUrl} onNavigate={onNavigate} />
+      ) : null}
+    </div>
+  );
+}
+
+function BookSummaryList({ books }: { books: ChatbotBookSummary[] }) {
+  return (
+    <div className="grid gap-2">
+      {books.map((book, index) => (
+        <div key={`${book.id ?? book.title ?? index}`} className="rounded-2xl border border-border/70 bg-paper/70 p-3">
+          <p className="text-sm font-black text-foreground">{book.title ?? "Libro recomendado"}</p>
+          <p className="mt-1 text-xs font-bold text-muted">
+            {[book.author, book.genre].filter(Boolean).join(" · ") || "Catalogo BiblioBot"}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2 text-[0.68rem] font-black uppercase tracking-wider text-muted">
+            {typeof book.price === "number" ? <span>{priceFormatter.format(book.price)}</span> : null}
+            {book.available !== null && book.available !== undefined ? (
+              <span>{book.available ? "Disponible" : "No disponible"}</span>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BookDetailSummary({ book }: { book: ChatbotBookSummary }) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-paper/70 p-3">
+      <p className="text-xs font-black uppercase tracking-widest text-accent">Detalle del libro</p>
+      <p className="mt-1 text-sm font-black text-foreground">{book.title ?? "Libro"}</p>
+      <p className="mt-1 text-xs font-bold text-muted">
+        {[book.author, book.genre].filter(Boolean).join(" · ") || "Informacion disponible"}
+      </p>
+      {typeof book.price === "number" ? (
+        <p className="mt-2 text-xs font-black text-foreground">{priceFormatter.format(book.price)}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function StockSummary({ stock }: { stock: NonNullable<ChatbotResponse["context"]["metadata"]>["stock"] }) {
+  if (!stock) return null;
+
+  const totalStock = stock.totalStock ?? stock.stock;
+
+  return (
+    <div className="rounded-2xl border border-border/70 bg-paper/70 p-3">
+      <p className="text-xs font-black uppercase tracking-widest text-accent">Disponibilidad</p>
+      <p className="mt-1 text-sm font-black text-foreground">{stock.title ?? "Libro consultado"}</p>
+      <p className="mt-1 text-xs font-bold text-muted">
+        {typeof totalStock === "number" ? `${totalStock} unidades disponibles` : "Disponibilidad consultada"}
+      </p>
+    </div>
+  );
+}
+
+function ActionButton({
+  label,
+  url,
+  onNavigate,
+}: {
+  label: string;
+  url: string | null | undefined;
+  onNavigate: (url: string | null | undefined) => void;
+}) {
+  const safeUrl = getSafeInternalPath(url);
+
+  if (!safeUrl) return null;
+
+  return (
+    <button
+      type="button"
+      className="rounded-full bg-foreground px-3 py-2 text-xs font-black text-paper transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      onClick={() => onNavigate(safeUrl)}
+    >
+      {label}
+    </button>
+  );
+}
+
+function getCatalogUrl(payload: ChatbotResponse): string | null {
+  const metadata = payload.context.metadata ?? {};
+  const linkUrl = findLinkUrl(payload.links, "CATALOG_SEARCH");
+
+  if (linkUrl) return linkUrl;
+
+  if (typeof metadata.frontendRoute === "string" && metadata.frontendRoute.startsWith("/")) {
+    return metadata.frontendRoute;
+  }
+
+  if (typeof metadata.query === "string" && metadata.query.trim()) {
+    return `/search?q=${encodeURIComponent(metadata.query.trim())}`;
+  }
+
+  return "/search";
+}
+
+function getProductUrl(payload: ChatbotResponse): string | null {
+  const linkUrl = findLinkUrl(payload.links, "BOOK_DETAIL");
+
+  if (linkUrl) return linkUrl;
+
+  const selectedBookId = payload.context.selectedBookId;
+
+  return selectedBookId ? `/books/${selectedBookId}` : null;
+}
+
+function getInvoiceUrl(payload: ChatbotResponse): string | null {
+  const invoiceNumber = payload.context.invoiceNumber ?? payload.context.metadata?.invoiceNumber;
+
+  return invoiceNumber ? `/dashboard?invoice=${encodeURIComponent(invoiceNumber)}` : null;
+}
+
+function findLinkUrl(links: ChatbotLink[], type: string, fallback?: string): string | null {
+  return links.find((link) => link.type === type)?.url ?? fallback ?? null;
+}
+
+function getFirstSafeLink(links: ChatbotLink[]): string | null {
+  for (const link of links) {
+    const safeUrl = getSafeInternalPath(link.url);
+
+    if (safeUrl) return safeUrl;
+  }
+
+  return null;
+}
+
+function getSafeInternalPath(url: string | null | undefined): string | null {
+  if (!url || !url.startsWith("/") || url.startsWith("//") || url.includes("\\")) {
+    return null;
+  }
+
+  if (url.startsWith("/api/") || /^\/[a-z][a-z0-9+.-]*:/i.test(url)) {
+    return null;
+  }
+
+  return url;
 }

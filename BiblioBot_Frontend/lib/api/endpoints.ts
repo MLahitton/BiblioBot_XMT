@@ -1,4 +1,8 @@
-export const API_ENDPOINTS = {
+﻿export const API_ENDPOINTS = {
+  chat: {
+    publicMessage: "/api/chat/public-message",
+    message: "/api/chat/message",
+  },
   auth: {
     register: "/api/auth/register",
     login: "/api/auth/login",
@@ -38,3 +42,4 @@ export const API_ENDPOINTS = {
   adminRoles: "/api/admin/roles",
   sales: "/api/ventas",
 } as const;
+
