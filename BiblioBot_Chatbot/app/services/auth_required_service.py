@@ -7,6 +7,7 @@ from app.services.frontend_action_service import FrontendActionService
 class AuthRequiredService:
     AUTHENTICATED_INTENTS = {
         "purchase_intent",
+        "checkout_cart",
         "invoice_query",
         "sales_query",
         "inventory_entry",

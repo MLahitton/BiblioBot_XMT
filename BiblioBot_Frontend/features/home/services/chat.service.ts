@@ -3,7 +3,9 @@ import { apiPost } from "@/lib/api/api-client";
 import { getStoredSession } from "@/features/auth/services/auth-storage";
 import type { ChatbotResponse, SendChatMessageResult } from "../types/chat.types";
 
-const CHAT_SESSION_STORAGE_KEY = "bibliobot_chat_session_id";
+export const BIBLIOBOT_CHAT_RESET_EVENT = "bibliobot:chat-reset";
+export const CHAT_SESSION_STORAGE_KEY = "bibliobot_chat_session_id";
+export const CHAT_MESSAGES_STORAGE_PREFIX = "bibliobot_chat_messages_";
 
 type ChatRequestBody = {
   sessionId: string;
@@ -34,6 +36,32 @@ export function resetChatSessionId(): string {
   }
 
   return sessionId;
+}
+
+export function getChatMessagesStorageKey(sessionId: string): string {
+  return `${CHAT_MESSAGES_STORAGE_PREFIX}${sessionId}`;
+}
+
+export function clearBiblioBotChatSession(): void {
+  if (typeof window === "undefined") return;
+
+  const currentSessionId = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+
+  window.localStorage.removeItem(CHAT_SESSION_STORAGE_KEY);
+
+  if (currentSessionId?.trim()) {
+    window.localStorage.removeItem(getChatMessagesStorageKey(currentSessionId));
+  }
+
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+
+    if (key?.startsWith(CHAT_MESSAGES_STORAGE_PREFIX)) {
+      window.localStorage.removeItem(key);
+    }
+  }
+
+  window.dispatchEvent(new Event(BIBLIOBOT_CHAT_RESET_EVENT));
 }
 
 export async function sendChatMessage(message: string): Promise<SendChatMessageResult> {

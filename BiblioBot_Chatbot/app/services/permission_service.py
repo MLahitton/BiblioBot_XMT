@@ -4,6 +4,8 @@ class PermissionService:
         "book_detail": ["books.read"],
         "stock_check": ["books.read", "inventory.read"],
         "purchase_intent": ["cart.manage", "sales.create"],
+        "checkout_cart": ["sales.create"],
+        "confirm_sale": ["sales.confirm"],
         "invoice_query": ["invoices.read_own", "invoices.read_all"],
         "sales_query": ["sales.read_own", "sales.read_all"],
         "inventory_entry": ["inventory.entry"],

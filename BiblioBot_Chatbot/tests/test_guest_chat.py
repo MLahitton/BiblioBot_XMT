@@ -129,6 +129,34 @@ def test_guest_purchase_intent_returns_auth_required():
     assert_auth_required(body, "purchase_intent")
 
 
+def test_phase11_guest_purchase_matilda_returns_auth_required():
+    body = post_chat("quiero comprar matilda")
+
+    assert_auth_required(body, "purchase_intent")
+
+
+def test_phase11_guest_stock_question_is_allowed():
+    body = post_chat("tienes matilda?")
+
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "stock_check"
+    assert body["context"]["metadata"]["stock"]["title"] == "Matilda"
+
+
+def test_guest_checkout_cart_returns_auth_required():
+    body = post_chat("finalizar compra")
+
+    assert_auth_required(body, "checkout_cart")
+    assert body["context"]["metadata"].get("pendingAction") is None
+
+
+def test_guest_confirm_sale_returns_auth_required():
+    body = post_chat("confirmar venta")
+
+    assert_auth_required(body, "confirm_sale")
+    assert body["context"]["metadata"].get("pendingAction") is None
+
+
 def test_guest_invoice_sales_inventory_transfer_and_purchase_request_return_auth_required():
     cases = [
         ("muestrame la factura FAC-0001", "invoice_query"),

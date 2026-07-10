@@ -6,6 +6,8 @@ import unicodedata
 class ConfirmationService:
     CONFIRMATION_REQUIRED_INTENTS = {
         "purchase_intent",
+        "checkout_cart",
+        "confirm_sale",
         "inventory_entry",
         "transfer_request",
         "purchase_request",

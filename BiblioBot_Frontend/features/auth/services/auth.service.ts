@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { apiGet, apiPost } from "@/lib/api/api-client";
+import { clearBiblioBotChatSession } from "@/features/home/services/chat.service";
 import {
   clearStoredSession,
   getStoredSession,
@@ -57,5 +58,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 export function logout(): void {
+  clearBiblioBotChatSession();
   clearStoredSession();
 }

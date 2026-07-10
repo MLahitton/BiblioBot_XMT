@@ -80,7 +80,7 @@ def test_book_detail_returns_books_slug_metadata_and_link():
 
 
 def test_book_detail_without_valid_book_does_not_navigate_to_product():
-    body = post_chat("ver libro El Hobbit", permissions=["chat.message", "books.read"])
+    body = post_chat("ver libro Libro Inexistente", permissions=["chat.message", "books.read"])
 
     assert body["state"] == "ASKING_DETAILS"
     assert body["uiAction"] == "NONE"

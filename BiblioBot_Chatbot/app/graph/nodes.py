@@ -14,6 +14,8 @@ from app.tools.tool_context import ToolExecutionContext
 from app.tools.tool_schemas import (
     AddOrUpdateCartItemInput,
     CheckStockInput,
+    ConfirmSaleInput,
+    CreateSaleFromCartInput,
     CreatePurchaseRequestInput,
     CreateTransferRequestInput,
     GetBookDetailInput,
@@ -26,7 +28,14 @@ from app.tools.tool_schemas import (
 from app.graph.state import ChatGraphState
 
 
-SENSITIVE_INTENTS = {"purchase_intent", "inventory_entry", "transfer_request", "purchase_request"}
+SENSITIVE_INTENTS = {
+    "purchase_intent",
+    "checkout_cart",
+    "confirm_sale",
+    "inventory_entry",
+    "transfer_request",
+    "purchase_request",
+}
 AUTH_REQUIRED_SERVICE = AuthRequiredService()
 FRONTEND_ACTION_SERVICE = FrontendActionService()
 ALLOWED_INTENTS = [
@@ -34,6 +43,8 @@ ALLOWED_INTENTS = [
     "book_detail",
     "stock_check",
     "purchase_intent",
+    "checkout_cart",
+    "confirm_sale",
     "invoice_query",
     "inventory_entry",
     "transfer_request",
@@ -48,17 +59,107 @@ GENRE_WORDS = {
     "romance",
     "ciencia ficcion",
     "historia",
+    "infantil",
+    "infantiles",
+    "ninos",
     "programacion",
     "software",
 }
 NATURAL_BOOK_DETAIL_PHRASES = (
     "dime sobre",
     "dime de",
+    "dime algo de",
+    "dime algo sobre",
     "hablame de",
+    "hablame sobre",
+    "cuentame de",
     "cuentame sobre",
+    "quiero saber de",
     "quiero saber sobre",
+    "quiero saber acerca de",
     "que sabes de",
+    "informacion de",
     "informacion sobre",
+    "info de",
+    "info sobre",
+    "de que trata",
+    "quiero ver",
+    "mostrar libro",
+    "abre",
+    "me interesa",
+    "quien escribio",
+    "cuanto cuesta",
+    "precio de",
+)
+STOCK_CHECK_PHRASES = (
+    "tienes",
+    "tienen",
+    "hay",
+    "existe",
+    "lo tienes",
+    "lo tienen",
+    "esta disponible",
+    "disponibilidad de",
+    "hay stock de",
+    "stock de",
+    "quedan unidades de",
+    "cuantos hay de",
+)
+CATALOG_SEARCH_PHRASES = (
+    "recomiendame libros",
+    "recomendame libros",
+    "busco libros",
+    "quiero libros",
+    "tienes libros",
+    "tienen libros",
+    "libros para",
+    "libros infantiles",
+    "libros de",
+    "libros del autor",
+    "libros parecidos a",
+    "libros como",
+    "muestrame libros",
+)
+PURCHASE_INTENT_PHRASES = (
+    "quiero comprar",
+    "comprar",
+    "agregame",
+    "agrega",
+    "agregar",
+    "anade",
+    "anadir",
+    "quiero llevar",
+    "quiero llevarme",
+    "dame",
+    "pon",
+    "mete",
+    "compra",
+)
+CHECKOUT_CART_PHRASES = (
+    "finalizar compra",
+    "finalizar mi compra",
+    "comprar lo del carrito",
+    "comprar carrito",
+    "pagar carrito",
+    "generar pedido",
+    "crear pedido",
+    "terminar compra",
+    "proceder al pago",
+    "hacer pedido",
+    "confirmar carrito",
+)
+CONFIRM_SALE_PHRASES = (
+    "confirmar venta",
+    "confirmar pedido",
+    "confirmar compra",
+    "confirmar la venta",
+    "confirmar mi pedido",
+    "confirmar mi compra",
+    "finalizar venta",
+    "completar pedido",
+    "completar compra",
+    "generar factura",
+    "facturar pedido",
 )
 
 
@@ -226,6 +327,9 @@ def make_tool_dispatch_node(
                     "ASK_BOOK_IDENTIFIER",
                 )
             result = tool_service.get_book_detail(GetBookDetailInput(book_id=book["id"]), context)
+            if _contains_stock_check_intent(state.get("normalized_message", "")):
+                stock_result = tool_service.check_stock(CheckStockInput(book_id=book["id"]), context)
+                return _book_detail_result_state(state, result, stock_result)
             return _book_detail_result_state(state, result)
 
         if intent == "stock_check":
@@ -255,9 +359,45 @@ def make_tool_dispatch_node(
             result = tool_service.query_sales(QuerySalesInput(scope=scope), context)
             return _sales_result_state(state, result)
 
+        if intent == "checkout_cart":
+            result = tool_service.create_sale_from_cart(
+                CreateSaleFromCartInput(
+                    session_id=state.get("session_id", ""),
+                    origin_code="CHATBOT",
+                ),
+                context,
+            )
+            return _pending_confirmation_state(
+                state,
+                result,
+                "Crear venta pendiente desde carrito",
+                confirmation_service,
+                metadata_extra={"originCode": "CHATBOT"},
+            )
+
+        if intent == "confirm_sale":
+            sale_id = _extract_sale_id(message)
+            branches = _extract_branches(message, tool_service)
+            result = tool_service.confirm_sale(
+                ConfirmSaleInput(
+                    sale_id=sale_id,
+                    branch_id=branches[0] if branches else None,
+                ),
+                context,
+            )
+            return _pending_confirmation_state(
+                state,
+                result,
+                f"Confirmar venta {sale_id}" if sale_id else "Confirmar venta pendiente",
+                confirmation_service,
+                metadata_extra={"saleId": sale_id, "branchId": branches[0] if branches else None},
+            )
+
         if intent == "purchase_intent":
             book = _find_book_from_message(message, tool_service)
             quantity = _extract_quantity(message)
+            if book and quantity is None and _purchase_can_default_to_one(message):
+                quantity = 1
             if not book or not quantity:
                 return _asking_details(
                     state,
@@ -451,7 +591,11 @@ def _catalog_result_state(state: ChatGraphState, query: str | None, result: dict
     }
 
 
-def _book_detail_result_state(state: ChatGraphState, result: dict[str, Any]) -> ChatGraphState:
+def _book_detail_result_state(
+    state: ChatGraphState,
+    result: dict[str, Any],
+    stock_result: dict[str, Any] | None = None,
+) -> ChatGraphState:
     if _is_backend_error(result):
         return _asking_details(
             state,
@@ -463,16 +607,27 @@ def _book_detail_result_state(state: ChatGraphState, result: dict[str, Any]) -> 
         return _asking_details(state, "No encontre ese libro. Indica otro titulo o identificador y lo reviso.", "ASK_BOOK_IDENTIFIER")
     link = FRONTEND_ACTION_SERVICE.build_book_detail_link(book["id"], book["title"])
     visual_metadata = FRONTEND_ACTION_SERVICE.build_book_metadata(book["id"], book["title"])
+    stock = stock_result.get("stock") if isinstance(stock_result, dict) else None
+    availability_text = ""
+    if isinstance(stock, dict):
+        total_stock = stock.get("totalStock", stock.get("stock", 0))
+        availability_text = f" Disponibilidad actual: {total_stock} unidad(es)."
     return {
         **state,
-        "response": "Encontre este libro. Te dejo el detalle para revisar su informacion, disponibilidad y precio.",
+        "response": "Encontre este libro. Te dejo el detalle para revisar su informacion, disponibilidad y precio." + availability_text,
         "state": ChatState.INTENT_DETECTED.value,
         "ui_action": UiActionType.NAVIGATE_TO_PRODUCT.value,
         "links": [link],
         "next_step": "BOOK_DETAIL_READY",
         "tool_result": result,
         "context": {**state.get("context", {}), "selectedBookId": book["id"]},
-        "metadata": {**state.get("metadata", {}), "book": _summarize_book(book), **visual_metadata},
+        "metadata": {
+            **state.get("metadata", {}),
+            "book": _summarize_book(book),
+            "stock": stock,
+            "availabilityRequested": stock is not None,
+            **visual_metadata,
+        },
     }
 
 
@@ -733,10 +888,32 @@ def _is_guest_state(state: ChatGraphState) -> bool:
 
 
 def _detect_intent(normalized: str) -> str:
+    if any(phrase in normalized for phrase in CONFIRM_SALE_PHRASES):
+        return "confirm_sale"
     if any(keyword in normalized for keyword in ("factura", "recibo", "comprobante")):
         return "invoice_query"
-    if any(phrase in normalized for phrase in NATURAL_BOOK_DETAIL_PHRASES):
+    if any(phrase in normalized for phrase in CHECKOUT_CART_PHRASES):
+        return "checkout_cart"
+    if any(phrase in normalized for phrase in ("solicitud de compra", "pedir proveedor", "comprar inventario")):
+        return "purchase_request"
+    if any(phrase in normalized for phrase in ("traslado", "mover sede", "transferir")):
+        return "transfer_request"
+    if any(phrase in normalized for phrase in ("registrar entrada", "entrada de inventario")):
+        return "inventory_entry"
+
+    has_purchase = _contains_purchase_intent(normalized)
+    has_detail = _contains_book_detail_intent(normalized)
+    has_stock = _contains_stock_check_intent(normalized)
+    has_catalog = _contains_catalog_search_intent(normalized)
+
+    if has_purchase:
+        return "purchase_intent"
+    if has_detail:
         return "book_detail"
+    if has_stock:
+        return "stock_check"
+    if has_catalog:
+        return "catalog_search"
     if "muestrame" in normalized:
         if any(keyword in normalized for keyword in ("libros", "catalogo")) or any(
             genre in normalized for genre in GENRE_WORDS
@@ -751,19 +928,18 @@ def _detect_intent(normalized: str) -> str:
         ("sales_query", ("ventas", "venta de hoy", "reporte de ventas", "mis ventas")),
         ("transfer_request", ("traslado", "mover sede", "transferir")),
         ("inventory_entry", ("inventario", "entrada", "registrar entrada")),
-        ("stock_check", ("stock", "disponible", "disponibilidad", "existencias")),
+        ("stock_check", ("stock", "disponible", "disponibilidad", "existencias", "quedan unidades")),
+        (
+            "confirm_sale",
+            CONFIRM_SALE_PHRASES,
+        ),
+        (
+            "checkout_cart",
+            CHECKOUT_CART_PHRASES,
+        ),
         (
             "purchase_intent",
-            (
-                "comprar",
-                "quiero llevar",
-                "agrega",
-                "agregar",
-                "agregar al carrito",
-                "anade",
-                "anadir",
-                "anadir al carrito",
-            ),
+            PURCHASE_INTENT_PHRASES,
         ),
         (
             "book_detail",
@@ -782,6 +958,38 @@ def _detect_intent(normalized: str) -> str:
         if any(keyword in normalized for keyword in keywords):
             return intent
     return "unknown"
+
+
+def _contains_book_detail_intent(normalized: str) -> bool:
+    return any(phrase in normalized for phrase in NATURAL_BOOK_DETAIL_PHRASES)
+
+
+def _contains_stock_check_intent(normalized: str) -> bool:
+    if "libros" in normalized and not any(keyword in normalized for keyword in ("stock", "disponible", "disponibilidad")):
+        return False
+
+    return any(phrase in normalized for phrase in STOCK_CHECK_PHRASES)
+
+
+def _contains_catalog_search_intent(normalized: str) -> bool:
+    return any(phrase in normalized for phrase in CATALOG_SEARCH_PHRASES) or any(
+        genre in normalized and "libro" in normalized for genre in GENRE_WORDS
+    )
+
+
+def _contains_purchase_intent(normalized: str) -> bool:
+    if any(phrase in normalized for phrase in CHECKOUT_CART_PHRASES):
+        return False
+
+    return any(_contains_normalized_phrase(normalized, phrase) for phrase in PURCHASE_INTENT_PHRASES) or re.search(
+        r"\bx\s*-?\d+\b",
+        normalized,
+    ) is not None
+
+
+def _contains_normalized_phrase(normalized: str, phrase: str) -> bool:
+    pattern = r"\b" + r"\s+".join(re.escape(part) for part in phrase.split()) + r"\b"
+    return re.search(pattern, normalized) is not None
 
 
 def _allowed_llm_intents(permission_service: PermissionService) -> list[str]:
@@ -804,8 +1012,14 @@ def _extract_catalog_query(message: str) -> str | None:
         "muestrame",
         "quiero",
         "ver",
+        "para",
+        "parecidos",
+        "parecido",
+        "como",
+        "autor",
         "de",
         "del",
+        "a",
         "la",
         "el",
         "un",
@@ -817,6 +1031,14 @@ def _extract_catalog_query(message: str) -> str | None:
 
 def _extract_invoice_id(message: str) -> str | None:
     match = re.search(r"\bFAC-\d{4,}\b", message.upper())
+    return match.group(0) if match else None
+
+
+def _extract_sale_id(message: str) -> str | None:
+    match = re.search(
+        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        message,
+    )
     return match.group(0) if match else None
 
 
@@ -836,6 +1058,24 @@ def _extract_quantity(message: str) -> int | None:
         if re.search(rf"\b{word}\b", normalized):
             return quantity
     return None
+
+
+def _purchase_can_default_to_one(message: str) -> bool:
+    normalized = _normalize(message)
+    if not _contains_purchase_intent(normalized):
+        return False
+    if re.search(r"\bbook-\d+\b", normalized):
+        return False
+
+    return not _has_explicit_quantity_reference(normalized)
+
+
+def _has_explicit_quantity_reference(normalized: str) -> bool:
+    if re.search(r"\bx\s*-?\d+\b", normalized) or re.search(r"(?<![\w-])(-?\d+)\b", normalized):
+        return True
+
+    quantity_words = {"un", "una", "uno", "dos", "tres", "cuatro", "cinco"}
+    return any(re.search(rf"\b{word}\b", normalized) for word in quantity_words)
 
 
 def _find_book_from_message(message: str, tool_service: BiblioBotToolService) -> dict | None:
@@ -865,14 +1105,16 @@ def _extract_book_lookup_queries(message: str) -> list[str]:
     intent_patterns = [
         r"\b(?:ver|mostrar|muestrame)\s+(?:el\s+|la\s+|un\s+|una\s+)?(?:libro|libros)\s+",
         r"\b(?:detalle|detalles|informacion)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?(?:libro|libros)?\s*",
-        r"\b(?:dime\s+sobre|dime\s+de|hablame\s+de|cuentame\s+sobre|quiero\s+saber\s+sobre|que\s+sabes\s+de|informacion\s+sobre)\s+",
+        r"\b(?:dime\s+sobre|dime\s+de|dime\s+algo\s+de|dime\s+algo\s+sobre|hablame\s+de|hablame\s+sobre|cuentame\s+de|cuentame\s+sobre|quiero\s+saber\s+de|quiero\s+saber\s+sobre|quiero\s+saber\s+acerca\s+de|que\s+sabes\s+de|informacion\s+de|informacion\s+sobre|info\s+de|info\s+sobre|de\s+que\s+trata|quien\s+escribio|precio\s+de|cuanto\s+cuesta)\s+",
         r"\b(?:hay\s+)?(?:stock|disponibilidad|disponible|existencias)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?",
-        r"\b(?:quiero\s+)?(?:comprar|compra|llevar|agrega|agregar|anade|anadir)\s+",
+        r"\b(?:tienes|tienen|hay|existe|esta\s+disponible|quedan\s+unidades\s+de|cuantos\s+hay\s+de)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?",
+        r"\b(?:quiero\s+)?(?:comprar|compra|llevar|llevarme|agregame|agrega|agregar|anade|anadir|dame|pon|mete)\s+(?:\d+\s+)?(?:unidades?\s+de\s+|de\s+)?",
         r"\b(?:registrar|crear|solicitud)\s+(?:entrada|traslado|compra|de compra)\s+(?:de|del)?\s*",
     ]
 
     for pattern in intent_patterns:
         candidate = re.sub(pattern, " ", normalized).strip()
+        candidate = _remove_trailing_book_noise(candidate)
         if candidate != normalized:
             _add_book_lookup_candidate(candidates, candidate)
 
@@ -884,33 +1126,62 @@ def _extract_book_lookup_queries(message: str) -> list[str]:
         "detalles",
         "informacion",
         "dime",
+        "algo",
         "sobre",
         "hablame",
         "cuentame",
+        "acerca",
         "saber",
         "sabes",
         "que",
+        "trata",
+        "quien",
+        "escribio",
+        "precio",
+        "cuanto",
+        "cuesta",
         "muestrame",
         "mostrar",
+        "abre",
+        "interesa",
         "quiero",
+        "como",
+        "invitado",
         "de",
         "del",
+        "al",
         "el",
         "la",
         "un",
         "una",
         "hay",
+        "tienes",
+        "tienen",
+        "existe",
+        "lo",
+        "tienes",
+        "tienen",
+        "esta",
         "stock",
         "disponible",
         "disponibilidad",
         "existencias",
+        "quedan",
+        "unidades",
+        "unidad",
+        "cuantos",
         "comprar",
         "compra",
         "llevar",
+        "llevarme",
+        "agregame",
         "agrega",
         "agregar",
         "anade",
         "anadir",
+        "dame",
+        "pon",
+        "mete",
         "carrito",
         "registrar",
         "entrada",
@@ -953,6 +1224,22 @@ def _add_book_lookup_candidate(candidates: list[str], value: str | None) -> None
         return
 
     candidates.append(candidate)
+
+
+def _remove_trailing_book_noise(value: str) -> str:
+    cleaned = value
+    noise_patterns = [
+        r"\b(?:lo\s+)?(?:tienes|tienen)\b",
+        r"\b(?:esta\s+)?disponible\b",
+        r"\bhay\b",
+        r"\bstock\b",
+        r"\ben\s+el\s+carrito\b",
+        r"\bal\s+carrito\b",
+        r"\bpor\s+favor\b",
+    ]
+    for pattern in noise_patterns:
+        cleaned = re.sub(pattern, " ", cleaned)
+    return " ".join(cleaned.split())
 
 
 def _select_best_book_match(
@@ -1141,6 +1428,8 @@ def _permission_denied_message(intent: str) -> str:
         "book_detail": "No puedo mostrar detalles de libros porque tu usuario no tiene el permiso necesario.",
         "stock_check": "No puedo consultar disponibilidad porque tu usuario no tiene el permiso necesario.",
         "purchase_intent": "No puedo preparar esa compra porque tu usuario no tiene el permiso necesario.",
+        "checkout_cart": "No puedo finalizar el carrito porque tu usuario no tiene el permiso necesario.",
+        "confirm_sale": "No puedo confirmar esa venta porque tu usuario no tiene el permiso necesario.",
         "invoice_query": "No puedo mostrar esa factura porque tu usuario no tiene el permiso necesario.",
         "sales_query": "No puedo mostrar esa informacion porque tu usuario no tiene el permiso necesario.",
         "inventory_entry": "No puedo preparar esa entrada de inventario porque tu usuario no tiene el permiso necesario.",
@@ -1151,7 +1440,7 @@ def _permission_denied_message(intent: str) -> str:
 
 
 def _auth_required_message(intent: str) -> str:
-    if intent in {"purchase_intent", "cart_manage", "cart_read", "create_sale", "confirm_sale"}:
+    if intent in {"purchase_intent", "checkout_cart", "confirm_sale", "cart_manage", "cart_read", "create_sale"}:
         return (
             "Puedo ayudarte a encontrar el libro, pero para comprar o usar el carrito "
             "necesitas iniciar sesion o crear una cuenta."
@@ -1201,4 +1490,5 @@ def _normalize(value: str) -> str:
         for char in unicodedata.normalize("NFD", value.lower())
         if unicodedata.category(char) != "Mn"
     )
-    return " ".join(without_accents.split())
+    without_punctuation = re.sub(r"[¿?¡!,.;:()\[\]{}\"']", " ", without_accents)
+    return " ".join(without_punctuation.split())

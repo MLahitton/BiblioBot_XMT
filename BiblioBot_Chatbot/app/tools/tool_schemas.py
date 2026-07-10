@@ -34,7 +34,8 @@ class CreateSaleFromCartInput(BaseModel):
 
 
 class ConfirmSaleInput(BaseModel):
-    sale_id: str = Field(..., min_length=1)
+    sale_id: str | None = None
+    branch_id: str | None = None
 
 
 class GetInvoiceInput(BaseModel):

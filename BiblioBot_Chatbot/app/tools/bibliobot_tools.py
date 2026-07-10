@@ -126,7 +126,7 @@ class BiblioBotToolService:
         )
         return self._pending_action(
             context=context,
-            intent="purchase_intent",
+            intent="checkout_cart",
             summary=f"Preparar venta desde carrito de la sesion {input_data.session_id}",
             details={**details, "draft": draft},
         )
@@ -139,11 +139,14 @@ class BiblioBotToolService:
         if not self._has_permission(context, "sales.confirm"):
             return self._permission_denied(["sales.confirm"])
 
+        details = input_data.model_dump()
+        details["origin_code"] = "CHATBOT"
+        sale_label = input_data.sale_id or "venta pendiente reciente"
         return self._pending_action(
             context=context,
-            intent="sales_confirm",
-            summary=f"Preparar confirmacion simulada de venta {input_data.sale_id}",
-            details=input_data.model_dump(),
+            intent="confirm_sale",
+            summary=f"Preparar confirmacion de {sale_label}",
+            details=details,
         )
 
     def get_invoice(self, input_data: GetInvoiceInput, context: ToolExecutionContext) -> dict:

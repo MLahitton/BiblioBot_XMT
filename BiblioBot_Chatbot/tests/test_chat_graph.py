@@ -291,6 +291,85 @@ def test_natural_book_detail_phrases_detect_and_extract_clean_title():
         assert client.queries[0] == expected_query
 
 
+def test_phase11_book_detail_natural_language_for_real_user_phrases():
+    cases = [
+        ("hablame sobre matilda", "Matilda"),
+        ("hablame sobre matilda, lo tienes?", "Matilda"),
+        ("quiero saber acerca de matilda", "Matilda"),
+        ("dime algo de el hobbit", "El Hobbit"),
+        ("que sabes de el senor de los anillos", "El Senor de los Anillos"),
+        ("de que trata alicia en el pais de las maravillas", "Alicia en el pais de las maravillas"),
+    ]
+
+    for message, expected_title in cases:
+        response = process(message, permissions=["chat.message", "books.read", "books.search"])
+
+        assert response.state == "INTENT_DETECTED"
+        assert response.context.intent == "book_detail"
+        assert response.uiAction == "NAVIGATE_TO_PRODUCT"
+        assert response.context.metadata["book"]["title"] == expected_title
+
+
+def test_phase11_combined_detail_and_availability_keeps_product_action_with_stock():
+    response = process("hablame sobre matilda, lo tienes?", permissions=["chat.message", "books.read", "books.search"])
+
+    assert response.context.intent == "book_detail"
+    assert response.uiAction == "NAVIGATE_TO_PRODUCT"
+    assert response.context.metadata["availabilityRequested"] is True
+    assert response.context.metadata["stock"]["title"] == "Matilda"
+    assert "ayuda general" not in response.response.lower()
+
+
+def test_phase11_stock_and_existence_phrases_find_books():
+    cases = [
+        ("tienes matilda?", "Matilda"),
+        ("tienen el hobbit?", "El Hobbit"),
+        ("hay stock de el hobbit?", "El Hobbit"),
+        ("esta disponible harry potter?", "Harry Potter y la piedra filosofal"),
+        ("cuantos hay de clean code?", "Clean Code"),
+    ]
+
+    for message, expected_title in cases:
+        response = process(message, permissions=["chat.message", "books.read"])
+
+        assert response.state == "INTENT_DETECTED"
+        assert response.context.intent == "stock_check"
+        assert response.context.metadata["stock"]["title"] == expected_title
+
+
+def test_phase11_catalog_search_natural_language_queries():
+    cases = [
+        "recomiendame libros infantiles",
+        "quiero libros de fantasia",
+        "tienes libros de roald dahl?",
+        "libros parecidos a matilda",
+    ]
+
+    for message in cases:
+        response = process(message, permissions=["chat.message", "books.search"])
+
+        assert response.state == "INTENT_DETECTED"
+        assert response.context.intent == "catalog_search"
+        assert response.uiAction == "NAVIGATE_TO_CATALOG"
+        assert response.context.metadata["resultCount"] >= 1
+
+
+def test_phase11_purchase_phrases_can_default_to_one_when_book_is_clear():
+    cases = [
+        ("quiero comprar matilda", "Matilda", 1),
+        ("agrega 2 matilda al carrito", "Matilda", 2),
+        ("quiero llevarme el hobbit", "El Hobbit", 1),
+    ]
+
+    for message, expected_title, expected_quantity in cases:
+        response = process(message, permissions=["chat.message", "cart.manage"])
+
+        assert response.state == "WAITING_CONFIRMATION"
+        assert response.context.intent == "purchase_intent"
+        assert response.context.metadata["bookTitle"] == expected_title
+        assert response.context.metadata["quantity"] == expected_quantity
+
+
 def test_book_detail_without_identifier_asks_clarification():
     response = process("ver libro", permissions=["chat.message", "books.read"])
 
@@ -369,6 +448,145 @@ def test_purchase_pending_action_is_stored_by_session():
     assert pending_action
     assert pending_action["actionRef"] == response.context.actionRef
     assert pending_action["originalIntent"] == "purchase_intent"
+
+
+def test_checkout_cart_phrases_prepare_pending_sale_confirmation():
+    messages = [
+        "finalizar compra",
+        "finalizar mi compra",
+        "comprar lo del carrito",
+        "comprar carrito",
+        "pagar carrito",
+        "generar pedido",
+        "crear pedido",
+        "terminar compra",
+        "proceder al pago",
+        "hacer pedido",
+        "confirmar carrito",
+    ]
+
+    for message in messages:
+        response = process(message, permissions=["chat.message", "sales.create"])
+        pending_action = response.context.metadata["pendingAction"]
+
+        assert response.state == "WAITING_CONFIRMATION"
+        assert response.context.intent == "checkout_cart"
+        assert response.context.requiresConfirmation is True
+        assert response.context.nextAction == "AWAIT_EXPLICIT_CONFIRMATION"
+        assert response.context.actionRef.startswith("mock-action-")
+        assert pending_action["status"] == "PENDING_CONFIRMATION"
+        assert pending_action["originalIntent"] == "checkout_cart"
+        assert pending_action["details"]["origin_code"] == "CHATBOT"
+
+
+def test_checkout_cart_confirmation_returns_confirmed_action_for_dotnet():
+    confirmation_service = ConfirmationService()
+    service = ChatGraphService(
+        confirmation_service=confirmation_service,
+        llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)),
+    )
+    session_id = "checkout-cart-session-confirm"
+
+    checkout = service.process(
+        request(
+            "finalizar compra",
+            sessionId=session_id,
+            permissions=["chat.message", "sales.create"],
+        )
+    )
+    confirmation = service.process(
+        request(
+            "si confirmo",
+            sessionId=session_id,
+            permissions=["chat.message", "sales.create"],
+        )
+    )
+
+    assert checkout.state == "WAITING_CONFIRMATION"
+    assert checkout.context.intent == "checkout_cart"
+    assert confirmation.state == "WAITING_CONFIRMATION"
+    assert confirmation.context.intent == "checkout_cart"
+    assert confirmation.context.nextAction == "CONFIRMATION_RECEIVED_MUTATION_BLOCKED"
+    assert confirmation.context.metadata["originalIntent"] == "checkout_cart"
+    assert confirmation.context.metadata["actionRef"] == checkout.context.actionRef
+    assert confirmation.context.metadata["confirmedAction"]["status"] == "CONFIRMED_SAFE_MODE"
+    assert confirmation.context.metadata["confirmedAction"]["details"]["origin_code"] == "CHATBOT"
+    assert confirmation_service.get_pending_action(session_id) is None
+
+
+def test_confirm_sale_phrases_prepare_pending_confirmation():
+    messages = [
+        "confirmar venta",
+        "confirmar pedido",
+        "confirmar compra",
+        "confirmar la venta",
+        "confirmar mi pedido",
+        "confirmar mi compra",
+        "finalizar venta",
+        "completar pedido",
+        "completar compra",
+        "generar factura",
+        "facturar pedido",
+    ]
+
+    for message in messages:
+        response = process(message, permissions=["chat.message", "sales.confirm"])
+        pending_action = response.context.metadata["pendingAction"]
+
+        assert response.state == "WAITING_CONFIRMATION"
+        assert response.context.intent == "confirm_sale"
+        assert response.context.requiresConfirmation is True
+        assert response.context.nextAction == "AWAIT_EXPLICIT_CONFIRMATION"
+        assert response.context.actionRef.startswith("mock-action-")
+        assert pending_action["status"] == "PENDING_CONFIRMATION"
+        assert pending_action["originalIntent"] == "confirm_sale"
+        assert pending_action["details"]["origin_code"] == "CHATBOT"
+
+
+def test_confirm_sale_extracts_sale_id_for_dotnet_confirmation():
+    sale_id = "042c6af7-f679-44ce-b4e4-ef52b53f07f1"
+    response = process(f"confirmar venta {sale_id}", permissions=["chat.message", "sales.confirm"])
+    pending_action = response.context.metadata["pendingAction"]
+
+    assert response.state == "WAITING_CONFIRMATION"
+    assert response.context.intent == "confirm_sale"
+    assert response.context.metadata["saleId"] == sale_id
+    assert pending_action["details"]["sale_id"] == sale_id
+
+
+def test_confirm_sale_confirmation_returns_confirmed_action_for_dotnet():
+    confirmation_service = ConfirmationService()
+    service = ChatGraphService(
+        confirmation_service=confirmation_service,
+        llm_assistant_service=LlmAssistantService(FakeGeminiClient(available=False)),
+    )
+    session_id = "confirm-sale-session-confirm"
+    sale_id = "042c6af7-f679-44ce-b4e4-ef52b53f07f1"
+
+    pending = service.process(
+        request(
+            f"confirmar venta {sale_id}",
+            sessionId=session_id,
+            permissions=["chat.message", "sales.confirm"],
+        )
+    )
+    confirmation = service.process(
+        request(
+            "si confirmo",
+            sessionId=session_id,
+            permissions=["chat.message", "sales.confirm"],
+        )
+    )
+
+    assert pending.state == "WAITING_CONFIRMATION"
+    assert confirmation.state == "WAITING_CONFIRMATION"
+    assert confirmation.context.intent == "confirm_sale"
+    assert confirmation.context.nextAction == "CONFIRMATION_RECEIVED_MUTATION_BLOCKED"
+    assert confirmation.context.metadata["originalIntent"] == "confirm_sale"
+    assert confirmation.context.metadata["actionRef"] == pending.context.actionRef
+    assert confirmation.context.metadata["confirmedAction"]["details"]["sale_id"] == sale_id
+    assert confirmation.context.metadata["confirmedAction"]["status"] == "CONFIRMED_SAFE_MODE"
+    assert confirmation_service.get_pending_action(session_id) is None
 
 
 def test_explicit_confirmation_consumes_existing_pending_action():
@@ -531,12 +749,10 @@ def test_purchase_intent_with_sales_create_permission_prepares_confirmation():
 def test_purchase_intent_missing_quantity_or_unknown_book_keeps_asking_details():
     messages = [
         "Quiero comprar 2",
-        "Quiero comprar Python Practico",
         "Quiero comprar 0 Python Practico",
         "Quiero comprar -1 Python Practico",
         "Quiero Python Practico x0",
         "Quiero Python Practico x-1",
-        "Quiero comprar 2 El Hobbit",
     ]
 
     for message in messages:

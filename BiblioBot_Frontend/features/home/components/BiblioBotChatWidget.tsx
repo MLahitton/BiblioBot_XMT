@@ -3,25 +3,30 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { sendChatMessage, resetChatSessionId } from "../services/chat.service";
+import {
+  BIBLIOBOT_CHAT_RESET_EVENT,
+  getChatMessagesStorageKey,
+  getOrCreateChatSessionId,
+  sendChatMessage,
+  resetChatSessionId,
+} from "../services/chat.service";
 import type { ChatbotBookSummary, ChatbotLink, ChatbotResponse } from "../types/chat.types";
 import { useChatContext } from "./ChatContext";
 
 type ChatMessage = {
   id: number;
+  role: "assistant" | "user";
   author: "bot" | "user";
   text: string;
+  createdAt: string;
   payload?: ChatbotResponse;
   isError?: boolean;
 };
 
-const initialMessages: ChatMessage[] = [
-  {
-    id: 1,
-    author: "bot",
-    text: "Hola, soy BiblioBot. Puedo ayudarte a buscar libros, revisar detalles, consultar stock o preparar una compra segura.",
-  },
-];
+const MAX_STORED_CHAT_MESSAGES = 50;
+const INITIAL_MESSAGE_ID = 1;
+const INITIAL_MESSAGE_TEXT =
+  "Hola, soy BiblioBot. Puedo ayudarte a buscar libros, revisar detalles, consultar stock o preparar una compra segura.";
 
 const quickPrompts = [
   "Recomiendame libros de fantasia",
@@ -34,6 +39,80 @@ const priceFormatter = new Intl.NumberFormat("es-CO", {
   currency: "COP",
   maximumFractionDigits: 0,
 });
+
+function createInitialMessages(): ChatMessage[] {
+  return [
+    {
+      id: INITIAL_MESSAGE_ID,
+      role: "assistant",
+      author: "bot",
+      text: INITIAL_MESSAGE_TEXT,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+}
+
+function loadStoredChatMessages(sessionId: string): ChatMessage[] {
+  if (typeof window === "undefined" || !sessionId) return [];
+
+  try {
+    const rawMessages = window.localStorage.getItem(getChatMessagesStorageKey(sessionId));
+    if (!rawMessages) return [];
+
+    const parsedMessages: unknown = JSON.parse(rawMessages);
+    if (!Array.isArray(parsedMessages)) return [];
+
+    return parsedMessages
+      .map((message, index) => normalizeStoredChatMessage(message, index))
+      .filter((message): message is ChatMessage => Boolean(message))
+      .slice(-MAX_STORED_CHAT_MESSAGES);
+  } catch {
+    return [];
+  }
+}
+
+function persistChatMessages(sessionId: string, messages: ChatMessage[]): void {
+  if (typeof window === "undefined" || !sessionId) return;
+
+  try {
+    const messagesToStore = messages.slice(-MAX_STORED_CHAT_MESSAGES);
+    window.localStorage.setItem(getChatMessagesStorageKey(sessionId), JSON.stringify(messagesToStore));
+  } catch {
+    // localStorage puede fallar por cuota o modo privado; el chat debe seguir funcionando en memoria.
+  }
+}
+
+function clearStoredChatMessages(sessionId: string): void {
+  if (typeof window === "undefined" || !sessionId) return;
+
+  window.localStorage.removeItem(getChatMessagesStorageKey(sessionId));
+}
+
+function normalizeStoredChatMessage(value: unknown, index: number): ChatMessage | null {
+  if (!value || typeof value !== "object") return null;
+
+  const record = value as Partial<ChatMessage>;
+  const text = typeof record.text === "string" ? record.text : "";
+  const author = record.author === "user" ? "user" : "bot";
+  const role = record.role === "user" || author === "user" ? "user" : "assistant";
+  const createdAt = typeof record.createdAt === "string" ? record.createdAt : new Date().toISOString();
+
+  if (!text.trim()) return null;
+
+  return {
+    id: typeof record.id === "number" && Number.isFinite(record.id) ? record.id : index + 1,
+    role,
+    author,
+    text,
+    createdAt,
+    payload: record.payload,
+    isError: Boolean(record.isError),
+  };
+}
+
+function getNextMessageId(messages: ChatMessage[]): number {
+  return Math.max(0, ...messages.map((message) => message.id)) + 1;
+}
 
 function CloseIcon() {
   return (
@@ -81,11 +160,59 @@ export function BiblioBotChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => createInitialMessages());
+  const [chatSessionId, setChatSessionId] = useState("");
+  const [hasLoadedStoredMessages, setHasLoadedStoredMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const messageIdRef = useRef(initialMessages.length + 1);
+  const messageIdRef = useRef(2);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const { setIsChatExpanded } = useChatContext();
+
+  useEffect(() => {
+    const sessionId = getOrCreateChatSessionId();
+    const storedMessages = loadStoredChatMessages(sessionId);
+    const nextMessages = storedMessages.length > 0 ? storedMessages : createInitialMessages();
+
+    setChatSessionId(sessionId);
+    setMessages(nextMessages);
+    messageIdRef.current = getNextMessageId(nextMessages);
+    setHasLoadedStoredMessages(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedStoredMessages || !chatSessionId) return;
+
+    persistChatMessages(chatSessionId, messages);
+  }, [chatSessionId, hasLoadedStoredMessages, messages]);
+
+  useEffect(() => {
+    const handleChatReset = () => {
+      const nextMessages = createInitialMessages();
+
+      setChatSessionId("");
+      setMessages(nextMessages);
+      messageIdRef.current = getNextMessageId(nextMessages);
+      setInput("");
+      setIsSending(false);
+    };
+
+    window.addEventListener(BIBLIOBOT_CHAT_RESET_EVENT, handleChatReset);
+    return () => window.removeEventListener(BIBLIOBOT_CHAT_RESET_EVENT, handleChatReset);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || chatSessionId || !hasLoadedStoredMessages) return;
+
+    const sessionId = getOrCreateChatSessionId();
+    const storedMessages = loadStoredChatMessages(sessionId);
+
+    setChatSessionId(sessionId);
+
+    if (storedMessages.length > 0) {
+      setMessages(storedMessages);
+      messageIdRef.current = getNextMessageId(storedMessages);
+    }
+  }, [chatSessionId, hasLoadedStoredMessages, isOpen]);
 
   useEffect(() => {
     setIsChatExpanded(isOpen && isExpanded);
@@ -120,9 +247,15 @@ export function BiblioBotChatWidget() {
   };
 
   const restartChat = () => {
-    resetChatSessionId();
-    messageIdRef.current = initialMessages.length + 1;
-    setMessages(initialMessages);
+    const currentSessionId = chatSessionId || getOrCreateChatSessionId();
+    clearStoredChatMessages(currentSessionId);
+
+    const nextSessionId = resetChatSessionId();
+    const nextMessages = createInitialMessages();
+
+    setChatSessionId(nextSessionId);
+    messageIdRef.current = getNextMessageId(nextMessages);
+    setMessages(nextMessages);
     setInput("");
   };
 
@@ -141,19 +274,30 @@ export function BiblioBotChatWidget() {
 
     setMessages((currentMessages) => [
       ...currentMessages,
-      { id: nextMessageId(), author: "user", text: trimmed },
+      {
+        id: nextMessageId(),
+        role: "user",
+        author: "user",
+        text: trimmed,
+        createdAt: new Date().toISOString(),
+      },
     ]);
     setInput("");
     setIsSending(true);
 
     try {
       const result = await sendChatMessage(trimmed);
+      if (result.sessionId && result.sessionId !== chatSessionId) {
+        setChatSessionId(result.sessionId);
+      }
       setMessages((currentMessages) => [
         ...currentMessages,
         {
           id: nextMessageId(),
+          role: "assistant",
           author: "bot",
           text: result.response.response,
+          createdAt: new Date().toISOString(),
           payload: result.response,
         },
       ]);
@@ -162,8 +306,10 @@ export function BiblioBotChatWidget() {
         ...currentMessages,
         {
           id: nextMessageId(),
+          role: "assistant",
           author: "bot",
           text: error instanceof Error ? error.message : "No pude contactar a BiblioBot en este momento.",
+          createdAt: new Date().toISOString(),
           isError: true,
         },
       ]);
