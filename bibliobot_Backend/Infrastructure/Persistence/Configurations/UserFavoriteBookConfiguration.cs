@@ -18,6 +18,9 @@ public sealed class UserFavoriteBookConfiguration : IEntityTypeConfiguration<Use
             .HasColumnName("created_at")
             .HasColumnType("timestamp with time zone")
             .IsRequired();
+        builder.Property(ufb => ufb.UpdatedAt)
+            .HasColumnName("updated_at")
+            .HasColumnType("timestamp with time zone");
 
         builder
             .HasOne(ufb => ufb.User)

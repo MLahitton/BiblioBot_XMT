@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(BiblioBotDbContext))]
-    [Migration("20260708125240_AddBookReviews")]
+    [Migration("20260709130803_AddBookReviews")]
     partial class AddBookReviews
     {
         /// <inheritdoc />

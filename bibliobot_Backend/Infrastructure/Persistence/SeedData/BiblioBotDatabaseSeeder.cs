@@ -258,8 +258,15 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
             existingCategory.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
+        var categoryNamesToSeed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var categoryName in CategoryTaxonomySeedData.CategoryNames)
         {
+            if (!categoryNamesToSeed.Add(categoryName))
+            {
+                continue;
+            }
+
             var exists = await _dbContext.Categories.AnyAsync(
                 category => category.Name.ToLower() == categoryName.ToLower(),
                 cancellationToken);
@@ -273,6 +280,9 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
                 });
             }
         }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SeedRealCatalogAsync(cancellationToken);
 
         adminRole = await _dbContext.Roles
             .FirstOrDefaultAsync(role => role.Code == adminRoleSeed.Code && role.IsActive, cancellationToken);
@@ -344,5 +354,282 @@ public class BiblioBotDatabaseSeeder : IDatabaseSeeder
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task SeedRealCatalogAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var authorsByName = (await _dbContext.Authors.ToListAsync(cancellationToken))
+            .GroupBy(author => NormalizeKey(author.FullName))
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var categoriesByName = (await _dbContext.Categories.ToListAsync(cancellationToken))
+            .GroupBy(category => NormalizeKey(category.Name))
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var publishersByName = (await _dbContext.Publishers.ToListAsync(cancellationToken))
+            .GroupBy(publisher => NormalizeKey(publisher.Name))
+            .ToDictionary(group => group.Key, group => group.First());
+
+        foreach (var categoryName in RealCatalogSeedData.Categories.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            EnsureCategory(categoryName, categoriesByName, now);
+        }
+
+        var publisherNames = RealCatalogSeedData.Publishers
+            .Concat(RealCatalogSeedData.Books.Select(book => book.Publisher).Where(publisher => !string.IsNullOrWhiteSpace(publisher))!)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var publisherName in publisherNames)
+        {
+            EnsurePublisher(publisherName!, publishersByName, now);
+        }
+
+        foreach (var authorName in RealCatalogSeedData.Authors)
+        {
+            EnsureAuthor(authorName, authorsByName, now);
+        }
+
+        var books = await _dbContext.Books
+            .Include(book => book.BookAuthors)
+                .ThenInclude(bookAuthor => bookAuthor.Author)
+            .Include(book => book.BookCategories)
+            .ToListAsync(cancellationToken);
+
+        var bookAuthorPairs = books
+            .SelectMany(book => book.BookAuthors.Select(bookAuthor => (bookAuthor.BookId, bookAuthor.AuthorId)))
+            .ToHashSet();
+
+        var bookCategoryPairs = books
+            .SelectMany(book => book.BookCategories.Select(bookCategory => (bookCategory.BookId, bookCategory.CategoryId)))
+            .ToHashSet();
+
+        foreach (var seedBook in RealCatalogSeedData.Books)
+        {
+            var primaryAuthorName = seedBook.Authors.First();
+            var book = books.FirstOrDefault(existingBook =>
+                SameText(existingBook.Title, seedBook.Title) &&
+                existingBook.BookAuthors.Any(bookAuthor => SameText(bookAuthor.Author.FullName, primaryAuthorName)));
+
+            var publisher = string.IsNullOrWhiteSpace(seedBook.Publisher)
+                ? null
+                : EnsurePublisher(seedBook.Publisher, publishersByName, now);
+
+            if (book is null)
+            {
+                book = new Book
+                {
+                    Title = seedBook.Title,
+                    Isbn = null,
+                    Description = seedBook.Description,
+                    PublisherId = publisher?.Id,
+                    PublicationYear = seedBook.PublicationYear,
+                    Language = seedBook.Language,
+                    ImageUrl = null,
+                    Price = seedBook.Price,
+                    IsActive = true,
+                    IsDeleted = false,
+                    CreatedAt = now
+                };
+
+                _dbContext.Books.Add(book);
+                books.Add(book);
+            }
+            else
+            {
+                UpdateExistingBook(book, seedBook, publisher, now);
+            }
+
+            foreach (var authorName in seedBook.Authors)
+            {
+                var author = EnsureAuthor(authorName, authorsByName, now);
+                var pair = (book.Id, author.Id);
+
+                if (bookAuthorPairs.Add(pair))
+                {
+                    _dbContext.BookAuthors.Add(new BookAuthor
+                    {
+                        BookId = book.Id,
+                        AuthorId = author.Id,
+                    });
+                }
+            }
+
+            foreach (var categoryName in seedBook.Categories)
+            {
+                var category = EnsureCategory(categoryName, categoriesByName, now);
+                var pair = (book.Id, category.Id);
+
+                if (bookCategoryPairs.Add(pair))
+                {
+                    _dbContext.BookCategories.Add(new BookCategory
+                    {
+                        BookId = book.Id,
+                        CategoryId = category.Id,
+                    });
+                }
+            }
+        }
+    }
+
+    private Author EnsureAuthor(
+        string authorName,
+        IDictionary<string, Author> authorsByName,
+        DateTimeOffset now)
+    {
+        var key = NormalizeKey(authorName);
+
+        if (authorsByName.TryGetValue(key, out var author))
+        {
+            if (!author.IsActive)
+            {
+                author.IsActive = true;
+                author.UpdatedAt = now;
+            }
+
+            return author;
+        }
+
+        author = new Author
+        {
+            FullName = authorName.Trim(),
+            IsActive = true,
+            CreatedAt = now
+        };
+
+        _dbContext.Authors.Add(author);
+        authorsByName[key] = author;
+
+        return author;
+    }
+
+    private Category EnsureCategory(
+        string categoryName,
+        IDictionary<string, Category> categoriesByName,
+        DateTimeOffset now)
+    {
+        var key = NormalizeKey(categoryName);
+
+        if (categoriesByName.TryGetValue(key, out var category))
+        {
+            if (!category.IsActive)
+            {
+                category.IsActive = true;
+                category.UpdatedAt = now;
+            }
+
+            return category;
+        }
+
+        category = new Category
+        {
+            Name = categoryName.Trim(),
+            IsActive = true,
+            CreatedAt = now
+        };
+
+        _dbContext.Categories.Add(category);
+        categoriesByName[key] = category;
+
+        return category;
+    }
+
+    private Publisher EnsurePublisher(
+        string publisherName,
+        IDictionary<string, Publisher> publishersByName,
+        DateTimeOffset now)
+    {
+        var key = NormalizeKey(publisherName);
+
+        if (publishersByName.TryGetValue(key, out var publisher))
+        {
+            if (!publisher.IsActive)
+            {
+                publisher.IsActive = true;
+                publisher.UpdatedAt = now;
+            }
+
+            return publisher;
+        }
+
+        publisher = new Publisher
+        {
+            Name = publisherName.Trim(),
+            IsActive = true,
+            CreatedAt = now
+        };
+
+        _dbContext.Publishers.Add(publisher);
+        publishersByName[key] = publisher;
+
+        return publisher;
+    }
+
+    private static void UpdateExistingBook(
+        Book book,
+        RealCatalogBookSeed seedBook,
+        Publisher? publisher,
+        DateTimeOffset now)
+    {
+        var wasUpdated = false;
+
+        if (book.IsDeleted)
+        {
+            book.IsDeleted = false;
+            book.DeletedAt = null;
+            wasUpdated = true;
+        }
+
+        if (!book.IsActive)
+        {
+            book.IsActive = true;
+            wasUpdated = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(book.Description))
+        {
+            book.Description = seedBook.Description;
+            wasUpdated = true;
+        }
+
+        if (book.PublisherId is null && publisher is not null)
+        {
+            book.PublisherId = publisher.Id;
+            wasUpdated = true;
+        }
+
+        if (book.PublicationYear is null && seedBook.PublicationYear is not null)
+        {
+            book.PublicationYear = seedBook.PublicationYear;
+            wasUpdated = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(book.Language))
+        {
+            book.Language = seedBook.Language;
+            wasUpdated = true;
+        }
+
+        if (book.Price <= 0)
+        {
+            book.Price = seedBook.Price;
+            wasUpdated = true;
+        }
+
+        if (wasUpdated)
+        {
+            book.UpdatedAt = now;
+        }
+    }
+
+    private static bool SameText(string? left, string? right)
+    {
+        return string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeKey(string value)
+    {
+        return value.Trim().ToUpperInvariant();
     }
 }
