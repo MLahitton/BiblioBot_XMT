@@ -5,3 +5,12 @@ __pycache__/
 .pytest_cache/
 pytest-cache-files-*/
 .vscode/
+
+# Runtime and temporary logs
+*.log
+temp_*.log
+*_stdout.log
+*_stderr.log
+
+# Nested Python caches
+**/__pycache__/

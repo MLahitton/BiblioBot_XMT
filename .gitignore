@@ -1,1 +1,33 @@
 BiblioBot_Chatbot/pytest-cache-files-*/
+
+# Monorepo local environment and temporary files
+.venv/
+.env
+*.log
+temp_*.log
+*_stdout.log
+*_stderr.log
+
+# Python/FastAPI - BiblioBot Chatbot
+BiblioBot_Chatbot/.venv/
+BiblioBot_Chatbot/**/__pycache__/
+BiblioBot_Chatbot/*.pyc
+BiblioBot_Chatbot/.pytest_cache/
+BiblioBot_Chatbot/.env
+BiblioBot_Chatbot/*.log
+BiblioBot_Chatbot/temp_*.log
+BiblioBot_Chatbot/*_stdout.log
+BiblioBot_Chatbot/*_stderr.log
+
+# .NET - BiblioBot Backend
+bibliobot_Backend/**/bin/
+bibliobot_Backend/**/obj/
+bibliobot_Backend/Api/.keys/
+bibliobot_Backend/**/.vs/
+bibliobot_Backend/**/TestResults/
+
+# IDE
+.vscode/
+.idea/
+*.user
+*.suo

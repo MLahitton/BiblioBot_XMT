@@ -483,3 +483,14 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# BiblioBot local build/runtime files
+**/bin/
+**/obj/
+Api/.keys/
+**/.vs/
+**/TestResults/
+*.log
+temp_*.log
+*_stdout.log
+*_stderr.log
