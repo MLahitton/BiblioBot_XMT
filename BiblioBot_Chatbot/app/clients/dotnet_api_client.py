@@ -287,8 +287,19 @@ class DotNetApiClient:
 
     def _normalize_book(self, item: dict) -> dict:
         title = item.get("title") or item.get("titulo") or item.get("name") or item.get("nombre") or ""
-        author = item.get("author") or item.get("autor") or item.get("authorName") or ""
-        genre = item.get("genre") or item.get("genero") or item.get("category") or item.get("categoria") or ""
+        author = (
+            item.get("author")
+            or item.get("autor")
+            or item.get("authorName")
+            or self._join_values(item.get("authors"))
+        )
+        genre = (
+            item.get("genre")
+            or item.get("genero")
+            or item.get("category")
+            or item.get("categoria")
+            or self._join_values(item.get("categories"))
+        )
         total_stock = item.get("totalStock", item.get("stockTotal", item.get("stock")))
         available = item.get("available", item.get("disponible"))
         if available is None and total_stock is not None:
@@ -304,6 +315,13 @@ class DotNetApiClient:
             "available": bool(available),
             "totalStock": total_stock,
         }
+
+    def _join_values(self, value: Any) -> str:
+        if isinstance(value, list):
+            return ", ".join(str(item).strip() for item in value if str(item).strip())
+        if value is None:
+            return ""
+        return str(value).strip()
 
     def _ensure_mutations_allowed(self) -> None:
         if not self.settings.allow_real_backend_mutations:

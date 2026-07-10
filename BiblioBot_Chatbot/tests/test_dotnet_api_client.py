@@ -78,6 +78,31 @@ def test_search_books_accepts_paged_items_shape():
     assert result[0]["title"] == "Arquitectura Limpia"
 
 
+def test_search_books_maps_real_backend_authors_and_categories():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return json_response(
+            {
+                "items": [
+                    {
+                        "id": "444",
+                        "title": "El Hobbit",
+                        "authors": ["J. R. R. Tolkien"],
+                        "categories": ["Fantasía", "Aventura"],
+                        "totalStock": 10,
+                    }
+                ],
+                "totalCount": 1,
+            }
+        )
+
+    result = make_client(handler).search_books("fantasia")
+
+    assert result[0]["author"] == "J. R. R. Tolkien"
+    assert result[0]["genre"] == "Fantasía, Aventura"
+    assert result[0]["authors"] == ["J. R. R. Tolkien"]
+    assert result[0]["categories"] == ["Fantasía", "Aventura"]
+
+
 def test_get_book_detail_uses_book_id_path():
     seen = {}
 

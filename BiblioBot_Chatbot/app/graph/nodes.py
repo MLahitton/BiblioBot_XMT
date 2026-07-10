@@ -395,8 +395,10 @@ def _catalog_result_state(state: ChatGraphState, query: str | None, result: dict
         response = "No pude consultar el catalogo en este momento. Puedes intentarlo nuevamente en unos segundos."
         books = []
     else:
-        books = result.get("books", []) if result.get("status") == "MOCK_ONLY" else []
-        titles = [book["title"] for book in books[:3]]
+        books = result.get("books", [])
+        if not isinstance(books, list):
+            books = []
+        titles = [book.get("title", "") for book in books[:3] if isinstance(book, dict) and book.get("title")]
         response = (
             "Claro, encontre algunos libros relacionados con tu busqueda. Te dejo el catalogo filtrado para revisarlos: "
             + "; ".join(titles)
@@ -846,18 +848,29 @@ def _base_metadata(request: ChatProcessRequest, intent: str) -> dict[str, Any]:
 
 
 def _summarize_books(books: list[dict]) -> list[dict]:
-    return [_summarize_book(book) for book in books[:5]]
+    return [_summarize_book(book) for book in books[:5] if isinstance(book, dict)]
 
 
 def _summarize_book(book: dict) -> dict:
+    author = book.get("author") or _join_book_values(book.get("authors"))
+    genre = book.get("genre") or _join_book_values(book.get("categories"))
+
     return {
-        "id": book["id"],
-        "title": book["title"],
-        "author": book["author"],
-        "genre": book["genre"],
-        "price": book["price"],
-        "available": book["available"],
+        "id": book.get("id", ""),
+        "title": book.get("title", ""),
+        "author": author,
+        "genre": genre,
+        "price": book.get("price"),
+        "available": bool(book.get("available", False)),
     }
+
+
+def _join_book_values(value: Any) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip())
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def _describe_allowed_capabilities(permissions: list[str]) -> str:

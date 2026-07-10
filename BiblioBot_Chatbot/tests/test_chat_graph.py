@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.graph import ChatGraphService, build_chat_graph
-from app.graph.nodes import final_safety_node
+from app.graph.nodes import _catalog_result_state, final_safety_node
 from app.main import app
 from app.schemas.chat_contract import ChatLink, ChatProcessRequest, ChatProcessResponse
 from app.services import ConfirmationService, LlmAssistantService, PermissionService
@@ -126,6 +126,31 @@ def test_catalog_search_uses_mock_and_prepares_visual_navigation():
     assert response.response
     assert response.context.metadata["resultCount"] >= 2
     assert response.context.metadata["filters"]["genre"] == "fantasia"
+
+
+def test_catalog_result_state_accepts_real_backend_books():
+    state = {"metadata": {"detectedIntent": "catalog_search"}}
+    result = {
+        "status": "REAL_BACKEND",
+        "books": [
+            {
+                "id": "real-book-001",
+                "title": "El Hobbit",
+                "authors": ["J. R. R. Tolkien"],
+                "categories": ["Fantasía"],
+                "price": 50000,
+                "available": True,
+            }
+        ],
+    }
+
+    response = _catalog_result_state(state, "fantasia", result)
+
+    assert response["state"] == "INTENT_DETECTED"
+    assert response["ui_action"] == "NAVIGATE_TO_CATALOG"
+    assert response["metadata"]["resultCount"] == 1
+    assert response["metadata"]["books"][0]["author"] == "J. R. R. Tolkien"
+    assert response["metadata"]["books"][0]["genre"] == "Fantasía"
 
 
 def test_catalog_search_with_show_me_books_phrase_stays_catalog():
