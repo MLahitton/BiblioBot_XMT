@@ -3,7 +3,14 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.graph import ChatGraphService, build_chat_graph
-from app.graph.nodes import _catalog_result_state, _find_book_from_message, final_safety_node
+from app.graph.nodes import (
+    _catalog_result_state,
+    _detect_intent,
+    _extract_book_lookup_queries,
+    _find_book_from_message,
+    _normalize,
+    final_safety_node,
+)
 from app.main import app
 from app.schemas.chat_contract import ChatLink, ChatProcessRequest, ChatProcessResponse
 from app.services import ConfirmationService, LlmAssistantService, PermissionService
@@ -51,6 +58,26 @@ class FakePagedRealClient:
                 "available": True,
             },
         }
+        self.books.update(
+            {
+                "real-alicia": {
+                    "id": "real-alicia",
+                    "title": "Alicia en el pa\u00eds de las maravillas",
+                    "author": "Lewis Carroll",
+                    "genre": "Fantasia",
+                    "price": 45000,
+                    "available": True,
+                },
+                "real-lotr": {
+                    "id": "real-lotr",
+                    "title": "El Se\u00f1or de los Anillos",
+                    "author": "J. R. R. Tolkien",
+                    "genre": "Fantasia",
+                    "price": 78000,
+                    "available": True,
+                },
+            }
+        )
 
     def search_books(self, query: str | None = None):
         self.queries.append(query)
@@ -65,6 +92,12 @@ class FakePagedRealClient:
 
         if "harry potter" in normalized_query:
             return [self.books["real-harry"]]
+
+        if "alicia" in normalized_query:
+            return [self.books["real-alicia"]]
+
+        if "senor" in normalized_query or "anillos" in normalized_query:
+            return [self.books["real-lotr"]]
 
         return []
 
@@ -227,6 +260,35 @@ def test_find_book_from_message_uses_specific_query_before_unpaged_fallback():
     assert stock["title"] == "El Hobbit"
     assert client.queries[0] == "el hobbit"
     assert None not in client.queries[:3]
+
+
+def test_natural_book_detail_phrases_detect_and_extract_clean_title():
+    cases = [
+        (
+            "dime sobre alicia en el pais de las maravillas",
+            "alicia en el pais de las maravillas",
+            "Alicia en el pa\u00eds de las maravillas",
+        ),
+        (
+            "hablame de El Hobbit",
+            "el hobbit",
+            "El Hobbit",
+        ),
+        (
+            "que sabes de El Se\u00f1or de los Anillos",
+            "el senor de los anillos",
+            "El Se\u00f1or de los Anillos",
+        ),
+    ]
+
+    for message, expected_query, expected_title in cases:
+        client = FakePagedRealClient()
+        service = BiblioBotToolService(mock_client=client)
+
+        assert _detect_intent(_normalize(message)) == "book_detail"
+        assert _extract_book_lookup_queries(message)[0] == expected_query
+        assert _find_book_from_message(message, service)["title"] == expected_title
+        assert client.queries[0] == expected_query
 
 
 def test_book_detail_without_identifier_asks_clarification():

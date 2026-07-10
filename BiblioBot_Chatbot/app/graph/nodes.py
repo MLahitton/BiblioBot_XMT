@@ -51,6 +51,15 @@ GENRE_WORDS = {
     "programacion",
     "software",
 }
+NATURAL_BOOK_DETAIL_PHRASES = (
+    "dime sobre",
+    "dime de",
+    "hablame de",
+    "cuentame sobre",
+    "quiero saber sobre",
+    "que sabes de",
+    "informacion sobre",
+)
 
 
 def normalize_input_node(state: ChatGraphState) -> ChatGraphState:
@@ -661,6 +670,8 @@ def _is_guest_state(state: ChatGraphState) -> bool:
 def _detect_intent(normalized: str) -> str:
     if any(keyword in normalized for keyword in ("factura", "recibo", "comprobante")):
         return "invoice_query"
+    if any(phrase in normalized for phrase in NATURAL_BOOK_DETAIL_PHRASES):
+        return "book_detail"
     if "muestrame" in normalized:
         if any(keyword in normalized for keyword in ("libros", "catalogo")) or any(
             genre in normalized for genre in GENRE_WORDS
@@ -689,7 +700,16 @@ def _detect_intent(normalized: str) -> str:
                 "anadir al carrito",
             ),
         ),
-        ("book_detail", ("detalle", "informacion del libro", "ver libro", "muestrame")),
+        (
+            "book_detail",
+            (
+                "detalle",
+                "informacion del libro",
+                "ver libro",
+                "muestrame",
+                *NATURAL_BOOK_DETAIL_PHRASES,
+            ),
+        ),
         ("catalog_search", ("buscar", "catalogo", "libro", "libros", "tienen", "recomienda", "recomiendame", "recomendame")),
         ("general_help", ("hola", "ayuda", "que puedes hacer")),
     ]
@@ -780,6 +800,7 @@ def _extract_book_lookup_queries(message: str) -> list[str]:
     intent_patterns = [
         r"\b(?:ver|mostrar|muestrame)\s+(?:el\s+|la\s+|un\s+|una\s+)?(?:libro|libros)\s+",
         r"\b(?:detalle|detalles|informacion)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?(?:libro|libros)?\s*",
+        r"\b(?:dime\s+sobre|dime\s+de|hablame\s+de|cuentame\s+sobre|quiero\s+saber\s+sobre|que\s+sabes\s+de|informacion\s+sobre)\s+",
         r"\b(?:hay\s+)?(?:stock|disponibilidad|disponible|existencias)\s+(?:de|del)?\s*(?:el\s+|la\s+|un\s+|una\s+)?",
         r"\b(?:quiero\s+)?(?:comprar|compra|llevar|agrega|agregar|anade|anadir)\s+",
         r"\b(?:registrar|crear|solicitud)\s+(?:entrada|traslado|compra|de compra)\s+(?:de|del)?\s*",
@@ -787,7 +808,8 @@ def _extract_book_lookup_queries(message: str) -> list[str]:
 
     for pattern in intent_patterns:
         candidate = re.sub(pattern, " ", normalized).strip()
-        _add_book_lookup_candidate(candidates, candidate)
+        if candidate != normalized:
+            _add_book_lookup_candidate(candidates, candidate)
 
     stop_words = {
         "ver",
@@ -796,6 +818,13 @@ def _extract_book_lookup_queries(message: str) -> list[str]:
         "detalle",
         "detalles",
         "informacion",
+        "dime",
+        "sobre",
+        "hablame",
+        "cuentame",
+        "saber",
+        "sabes",
+        "que",
         "muestrame",
         "mostrar",
         "quiero",
