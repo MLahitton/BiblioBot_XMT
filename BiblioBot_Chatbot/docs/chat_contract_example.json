@@ -1,0 +1,48 @@
+{
+  "request": {
+    "sessionId": "session-123",
+    "message": "Quiero buscar libros de arquitectura",
+    "userId": "0d4f3d2a-8f6a-4d50-86df-f1f80993b8e9",
+    "userEmail": "cliente@example.com",
+    "roles": ["CLIENT"],
+    "permissions": ["books.read", "books.search", "chat.message"],
+    "source": "DOTNET_BACKEND",
+    "sentAt": "2026-07-06T12:00:00Z"
+  },
+  "response": {
+    "response": "Encontre estos libros en el catalogo simulado: Arquitectura Limpia para APIs.",
+    "state": "INTENT_DETECTED",
+    "links": [],
+    "uiAction": "NAVIGATE_TO_CATALOG",
+    "context": {
+      "intent": "catalog_search",
+      "requiresConfirmation": false,
+      "actionRef": null,
+      "invoiceNumber": null,
+      "saleOrigin": "CHATBOT",
+      "nextAction": "SEARCH_BOOKS_PENDING",
+      "selectedBookId": null,
+      "saleId": null,
+      "selectedBranchId": null,
+      "metadata": {
+        "sessionId": "session-123",
+        "source": "DOTNET_BACKEND",
+        "roles": ["CLIENT"],
+        "permissions": ["books.read", "books.search", "chat.message"],
+        "detectedIntent": "catalog_search",
+        "query": "arquitectura",
+        "resultCount": 1,
+        "books": [
+          {
+            "id": "book-004",
+            "title": "Arquitectura Limpia para APIs",
+            "author": "Diego Salazar",
+            "genre": "software",
+            "price": 81000,
+            "available": true
+          }
+        ]
+      }
+    }
+  }
+}
