@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { routes } from "@/constants/routes";
 import {
   BIBLIOBOT_CHAT_RESET_EVENT,
   getChatMessagesStorageKey,
@@ -10,7 +11,7 @@ import {
   sendChatMessage,
   resetChatSessionId,
 } from "../services/chat.service";
-import type { ChatbotBookSummary, ChatbotLink, ChatbotResponse } from "../types/chat.types";
+import type { ChatbotBookSummary, ChatbotLink, ChatbotPageContext, ChatbotResponse } from "../types/chat.types";
 import { useChatContext } from "./ChatContext";
 
 type ChatMessage = {
@@ -155,7 +156,11 @@ function ExpandIcon({ isExpanded }: { isExpanded: boolean }) {
   );
 }
 
-export function BiblioBotChatWidget() {
+export function BiblioBotChatWidget({
+  pageContext,
+}: {
+  pageContext?: ChatbotPageContext;
+}) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -166,6 +171,7 @@ export function BiblioBotChatWidget() {
   const [isSending, setIsSending] = useState(false);
   const messageIdRef = useRef(2);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const { setIsChatExpanded } = useChatContext();
 
   useEffect(() => {
@@ -284,9 +290,10 @@ export function BiblioBotChatWidget() {
     ]);
     setInput("");
     setIsSending(true);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
 
     try {
-      const result = await sendChatMessage(trimmed);
+      const result = await sendChatMessage(trimmed, pageContext);
       if (result.sessionId && result.sessionId !== chatSessionId) {
         setChatSessionId(result.sessionId);
       }
@@ -320,6 +327,9 @@ export function BiblioBotChatWidget() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isSending) return;
+
     void sendMessage(input);
   };
 
@@ -453,19 +463,35 @@ export function BiblioBotChatWidget() {
             Mensaje para BiblioBot
           </label>
           <input
+            ref={inputRef}
             id="bibliobot-message"
             value={input}
             onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && isSending) {
+                event.preventDefault();
+              }
+            }}
             placeholder="Escribe tu pregunta"
-            disabled={isSending}
-            className="h-11 min-w-0 flex-1 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground outline-none placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-70 focus:border-accent"
+            className="h-11 min-w-0 flex-1 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground outline-none placeholder:text-muted focus:border-accent"
           />
           <button
             type="submit"
             disabled={isSending || !input.trim()}
+            aria-busy={isSending}
             className="h-11 rounded-full bg-accent px-4 text-xs font-black text-paper shadow-[0_10px_20px_rgba(255,96,55,0.2)] transition hover:bg-foreground disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            {isSending ? "..." : "Enviar"}
+            {isSending ? (
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-paper/50 border-t-paper"
+                />
+                Enviando
+              </span>
+            ) : (
+              "Enviar"
+            )}
           </button>
         </form>
       </div>
@@ -510,6 +536,8 @@ function ChatResponseActions({
   const productUrl = getProductUrl(payload);
   const invoiceUrl = getFirstSafeLink(payload.links) ?? getInvoiceUrl(payload);
   const cartUrl = getFirstSafeLink(payload.links) ?? "/cart";
+  const adminUrl = getAdminUrl(payload);
+  const dashboardAdminLabel = getDashboardAdminActionLabel(payload.uiAction);
 
   return (
     <div className="mt-3 space-y-3">
@@ -542,6 +570,26 @@ function ChatResponseActions({
 
       {payload.uiAction === "APPLY_FILTERS" && catalogUrl ? (
         <ActionButton label="Aplicar filtros" url={catalogUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "NAVIGATE_TO_ADMIN_CREATE_USER" && adminUrl ? (
+        <ActionButton label="Abrir usuarios" url={adminUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "NAVIGATE_TO_ADMIN_USERS" && adminUrl ? (
+        <ActionButton label="Ver usuarios" url={adminUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "NAVIGATE_TO_ADMIN_INVENTORY" && adminUrl ? (
+        <ActionButton label="Abrir inventario" url={adminUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {payload.uiAction === "NAVIGATE_TO_INVENTORY_ADJUSTMENT" && adminUrl ? (
+        <ActionButton label="Ajustar inventario" url={adminUrl} onNavigate={onNavigate} />
+      ) : null}
+
+      {dashboardAdminLabel && adminUrl ? (
+        <ActionButton label={dashboardAdminLabel} url={adminUrl} onNavigate={onNavigate} />
       ) : null}
     </div>
   );
@@ -656,6 +704,40 @@ function getInvoiceUrl(payload: ChatbotResponse): string | null {
   return invoiceNumber ? `/dashboard?invoice=${encodeURIComponent(invoiceNumber)}` : null;
 }
 
+function getAdminUrl(payload: ChatbotResponse): string | null {
+  const metadata = payload.context.metadata ?? {};
+  const route = typeof metadata.frontendRoute === "string" ? getSafeInternalPath(metadata.frontendRoute) : null;
+
+  if (route) return route;
+
+  if (payload.uiAction === "NAVIGATE_TO_ADMIN_CREATE_USER" || payload.uiAction === "NAVIGATE_TO_ADMIN_USERS") {
+    return routes.adminUsers;
+  }
+
+  if (payload.uiAction === "NAVIGATE_TO_ADMIN_INVENTORY" || payload.uiAction === "NAVIGATE_TO_INVENTORY_ADJUSTMENT") {
+    return routes.adminInventory;
+  }
+
+  if (
+    payload.uiAction === "NAVIGATE_TO_ADMIN_SALES" ||
+    payload.uiAction === "NAVIGATE_TO_ADMIN_INVOICES" ||
+    payload.uiAction === "NAVIGATE_TO_ADMIN_REPORTS" ||
+    payload.uiAction === "NAVIGATE_TO_ADMIN_REQUESTS"
+  ) {
+    return routes.dashboard;
+  }
+
+  return null;
+}
+
+function getDashboardAdminActionLabel(uiAction: string): string | null {
+  if (uiAction === "NAVIGATE_TO_ADMIN_SALES") return "Ver ventas";
+  if (uiAction === "NAVIGATE_TO_ADMIN_INVOICES") return "Ver facturas";
+  if (uiAction === "NAVIGATE_TO_ADMIN_REPORTS") return "Ver reportes";
+  if (uiAction === "NAVIGATE_TO_ADMIN_REQUESTS") return "Ver solicitudes";
+  return null;
+}
+
 function findLinkUrl(links: ChatbotLink[], type: string, fallback?: string): string | null {
   return links.find((link) => link.type === type)?.url ?? fallback ?? null;
 }
@@ -681,3 +763,4 @@ function getSafeInternalPath(url: string | null | undefined): string | null {
 
   return url;
 }
+

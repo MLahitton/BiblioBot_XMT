@@ -1,16 +1,20 @@
-﻿import { API_ENDPOINTS } from "@/lib/api/endpoints";
+import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { apiPost } from "@/lib/api/api-client";
 import { getStoredSession } from "@/features/auth/services/auth-storage";
-import type { ChatbotResponse, SendChatMessageResult } from "../types/chat.types";
+import type {
+  ChatbotContextBook,
+  ChatbotPageContext,
+  ChatbotResponse,
+  SendChatMessageRequest,
+  SendChatMessageResult,
+} from "../types/chat.types";
 
 export const BIBLIOBOT_CHAT_RESET_EVENT = "bibliobot:chat-reset";
 export const CHAT_SESSION_STORAGE_KEY = "bibliobot_chat_session_id";
 export const CHAT_MESSAGES_STORAGE_PREFIX = "bibliobot_chat_messages_";
 
-type ChatRequestBody = {
-  sessionId: string;
-  message: string;
-};
+const MAX_VISIBLE_CONTEXT_BOOKS = 10;
+const MAX_CONTEXT_FILTERS = 8;
 
 export function getOrCreateChatSessionId(): string {
   if (typeof window === "undefined") {
@@ -64,7 +68,10 @@ export function clearBiblioBotChatSession(): void {
   window.dispatchEvent(new Event(BIBLIOBOT_CHAT_RESET_EVENT));
 }
 
-export async function sendChatMessage(message: string): Promise<SendChatMessageResult> {
+export async function sendChatMessage(
+  message: string,
+  pageContext?: ChatbotPageContext | null,
+): Promise<SendChatMessageResult> {
   const sessionId = getOrCreateChatSessionId();
   const session = getStoredSession();
   const token = session?.accessToken?.trim();
@@ -72,14 +79,12 @@ export async function sendChatMessage(message: string): Promise<SendChatMessageR
   const endpoint = authenticated
     ? API_ENDPOINTS.chat.message
     : API_ENDPOINTS.chat.publicMessage;
+  const payload = buildChatRequestPayload(sessionId, message, pageContext);
 
   try {
-    const response = await apiPost<ChatbotResponse, ChatRequestBody>(
+    const response = await apiPost<ChatbotResponse, SendChatMessageRequest>(
       endpoint,
-      {
-        sessionId,
-        message,
-      },
+      payload,
       authenticated ? { token } : {},
     );
 
@@ -93,12 +98,136 @@ export async function sendChatMessage(message: string): Promise<SendChatMessageR
   }
 }
 
+export async function sendPublicMessage(
+  message: string,
+  pageContext?: ChatbotPageContext | null,
+): Promise<SendChatMessageResult> {
+  const sessionId = getOrCreateChatSessionId();
+  const payload = buildChatRequestPayload(sessionId, message, pageContext);
+
+  try {
+    const response = await apiPost<ChatbotResponse, SendChatMessageRequest>(
+      API_ENDPOINTS.chat.publicMessage,
+      payload,
+    );
+
+    return {
+      response,
+      sessionId,
+      authenticated: false,
+    };
+  } catch (error) {
+    throw new Error(getFriendlyChatErrorMessage(error));
+  }
+}
+
+function buildChatRequestPayload(
+  sessionId: string,
+  message: string,
+  pageContext?: ChatbotPageContext | null,
+): SendChatMessageRequest {
+  const trimmedMessage = message.trim();
+
+  if (!trimmedMessage) {
+    throw new Error("El mensaje no puede estar vacio.");
+  }
+
+  const normalizedPageContext = normalizePageContext(pageContext);
+
+  return {
+    sessionId,
+    message: trimmedMessage,
+    ...(normalizedPageContext ? { pageContext: normalizedPageContext } : {}),
+  };
+}
+
 function createChatSessionId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `guest-${crypto.randomUUID()}`;
   }
 
   return `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizePageContext(pageContext?: ChatbotPageContext | null): ChatbotPageContext | undefined {
+  if (!pageContext) return undefined;
+
+  const activeFilters = normalizeActiveFilters(pageContext.activeFilters);
+  const visibleBooks = (pageContext.visibleBooks ?? [])
+    .map(normalizeContextBook)
+    .filter((book): book is ChatbotContextBook => Boolean(book))
+    .slice(0, MAX_VISIBLE_CONTEXT_BOOKS);
+  const selectedBook = normalizeContextBook(pageContext.selectedBook);
+
+  const normalized: ChatbotPageContext = {};
+  const route = normalizeOptionalText(pageContext.route);
+  const pageTitle = normalizeOptionalText(pageContext.pageTitle);
+  const searchQuery = normalizeOptionalText(pageContext.searchQuery);
+  const activeCategory = normalizeOptionalText(pageContext.activeCategory);
+
+  if (route) normalized.route = route;
+  if (pageTitle) normalized.pageTitle = pageTitle;
+  if (searchQuery) normalized.searchQuery = searchQuery;
+  if (activeCategory) normalized.activeCategory = activeCategory;
+  if (Object.keys(activeFilters).length > 0) normalized.activeFilters = activeFilters;
+  if (visibleBooks.length > 0) normalized.visibleBooks = visibleBooks;
+  if (selectedBook) normalized.selectedBook = selectedBook;
+  if (pageContext.cartSummary) {
+    normalized.cartSummary = {
+      itemCount: normalizeOptionalNumber(pageContext.cartSummary.itemCount),
+      totalItems: normalizeOptionalNumber(pageContext.cartSummary.totalItems),
+      subtotal: normalizeOptionalNumber(pageContext.cartSummary.subtotal),
+    };
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeActiveFilters(filters?: Record<string, string> | null): Record<string, string> {
+  if (!filters) return {};
+
+  return Object.entries(filters)
+    .slice(0, MAX_CONTEXT_FILTERS)
+    .reduce<Record<string, string>>((accumulator, [key, value]) => {
+      const normalizedKey = normalizeOptionalText(key);
+      const normalizedValue = normalizeOptionalText(value);
+
+      if (normalizedKey && normalizedValue) {
+        accumulator[normalizedKey] = normalizedValue;
+      }
+
+      return accumulator;
+    }, {});
+}
+
+function normalizeContextBook(book?: ChatbotContextBook | null): ChatbotContextBook | null {
+  if (!book) return null;
+
+  const id = normalizeOptionalText(book.id);
+  const title = normalizeOptionalText(book.title);
+
+  if (!id && !title) return null;
+
+  return {
+    ...(id ? { id } : {}),
+    ...(title ? { title } : {}),
+    authors: (book.authors ?? []).map(normalizeOptionalText).filter((value): value is string => Boolean(value)),
+    categories: (book.categories ?? []).map(normalizeOptionalText).filter((value): value is string => Boolean(value)),
+    price: normalizeOptionalNumber(book.price),
+    available: typeof book.available === "boolean" ? book.available : null,
+  };
+}
+
+function normalizeOptionalText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value;
 }
 
 function getFriendlyChatErrorMessage(error: unknown): string {

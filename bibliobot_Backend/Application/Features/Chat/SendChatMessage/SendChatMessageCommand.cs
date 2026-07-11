@@ -1,6 +1,7 @@
 using Application.Features.Chat.Common;
 using MediatR;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace Application.Features.Chat.SendChatMessage;
 
@@ -11,6 +12,7 @@ public sealed class SendChatMessageCommand : IRequest<ChatMessageResponseDto>
     public bool IsGuest { get; init; }
     public Guid? UserId { get; init; }
     public string? UserEmail { get; init; }
+    public JsonElement? PageContext { get; init; }
     public IReadOnlyCollection<string> RolesFromClaims { get; init; } = [];
     public IReadOnlyCollection<string> PermissionsFromClaims { get; init; } = [];
 }

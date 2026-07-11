@@ -113,11 +113,11 @@ class ChatOrchestratorService:
             books = self.mock_client.search_books(query)
             titles = [book["title"] for book in books[:3]]
             response = (
-                "Encontre estos libros en el catalogo simulado: "
+                "Encontre estos libros en el catalogo: "
                 + "; ".join(titles)
                 + "."
                 if titles
-                else "No encontre coincidencias en el catalogo simulado. Prueba con titulo, autor o categoria."
+                else "No encontre coincidencias en el catalogo. Prueba con titulo, autor o categoria."
             )
             return self._build_response(
                 request=request,
@@ -140,7 +140,7 @@ class ChatOrchestratorService:
                     request=request,
                     response=(
                         f"{book['title']} de {book['author']}. "
-                        f"Genero: {book['genre']}. Precio simulado: {book['price']}."
+                        f"Genero: {book['genre']}. Precio: {book['price']}."
                     ),
                     state=ChatState.INTENT_DETECTED,
                     intent=intent,
@@ -163,7 +163,7 @@ class ChatOrchestratorService:
                 return self._build_response(
                     request=request,
                     response=(
-                        f"Stock simulado para {book['title']}: "
+                        f"Stock para {book['title']}: "
                         f"{stock['totalStock']} unidades en total."
                     ),
                     state=ChatState.INTENT_DETECTED,
@@ -435,6 +435,7 @@ class ChatOrchestratorService:
         links: list[ChatLink] | None = None,
         metadata_extra: dict | None = None,
     ) -> ChatProcessResponse:
+        page_context = request.pageContext.model_dump(exclude_none=True) if request.pageContext else None
         metadata = {
             "sessionId": request.sessionId,
             "source": request.source,
@@ -442,6 +443,8 @@ class ChatOrchestratorService:
             "permissions": request.permissions,
             "detectedIntent": intent,
         }
+        if page_context:
+            metadata["pageContext"] = page_context
         if metadata_extra:
             metadata.update(metadata_extra)
 
@@ -458,6 +461,7 @@ class ChatOrchestratorService:
                 actionRef=action_ref,
                 saleOrigin="CHATBOT",
                 nextAction=next_action,
+                pageContext=page_context,
                 metadata=metadata,
             ),
         )

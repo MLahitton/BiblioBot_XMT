@@ -38,6 +38,7 @@ public sealed class ChatController : ControllerBase
                     SessionId = request.SessionId,
                     Message = request.Message,
                     IsGuest = false,
+                    PageContext = request.PageContext,
                     RolesFromClaims = GetRolesFromClaims(),
                     PermissionsFromClaims = GetPermissionsFromClaims(),
                 },
@@ -89,6 +90,7 @@ public sealed class ChatController : ControllerBase
                     IsGuest = true,
                     UserId = null,
                     UserEmail = null,
+                    PageContext = request.PageContext,
                     RolesFromClaims = ["GUEST"],
                     PermissionsFromClaims =
                     [

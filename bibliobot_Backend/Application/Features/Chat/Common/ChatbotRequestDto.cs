@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json;
 
 namespace Application.Features.Chat.Common;
 
@@ -12,4 +13,5 @@ public sealed class ChatbotRequestDto
     public IReadOnlyCollection<string> Permissions { get; init; } = [];
     public string Source { get; init; } = "DOTNET_BACKEND";
     public DateTimeOffset SentAt { get; init; }
+    public JsonElement? PageContext { get; init; }
 }

@@ -430,14 +430,18 @@ def test_stock_check_detects_existing_book_from_message():
 
 
 def test_stock_check_without_book_asks_book_and_branch():
-    payload = build_payload("hay disponibilidad", permissions=["chat.message", "inventory.read"])
+    payload = build_payload(
+        "hay disponibilidad",
+        sessionId="contract-stock-without-book-empty",
+        permissions=["chat.message", "inventory.read"],
+    )
 
     response = client.post("/chat/process", json=payload)
 
     assert response.status_code == 200
     body = response.json()
     assert body["state"] == "ASKING_DETAILS"
-    assert body["context"]["intent"] == "stock_check"
+    assert body["context"]["intent"] == "stock_context_query"
     assert body["context"]["nextAction"] == "ASK_BOOK_AND_BRANCH"
 
 
@@ -671,8 +675,8 @@ def test_unknown_intent_needs_clarification():
     assert response.status_code == 200
     body = response.json()
     assert body["state"] == "NEEDS_CLARIFICATION"
-    assert body["context"]["intent"] == "unknown"
-    assert body["context"]["nextAction"] == "ASK_CLARIFICATION"
+    assert body["context"]["intent"] == "out_of_domain"
+    assert body["context"]["nextAction"] == "OUT_OF_DOMAIN"
 
 
 def test_chat_process_works_without_gemini_api_key():
@@ -688,7 +692,7 @@ def test_chat_process_works_without_gemini_api_key():
         assert response.status_code == 200
         body = response.json()
         assert body["state"] == "IDLE"
-        assert body["context"]["intent"] == "general_help"
+        assert body["context"]["intent"] == "greeting"
     finally:
         chat_routes.chat_orchestrator.llm_assistant_service = original_llm_service
 
@@ -766,8 +770,8 @@ def test_out_of_domain_question_needs_clarification():
     assert response.status_code == 200
     body = response.json()
     assert body["state"] == "NEEDS_CLARIFICATION"
-    assert body["context"]["intent"] == "unknown"
-    assert body["context"]["nextAction"] == "ASK_CLARIFICATION"
+    assert body["context"]["intent"] == "out_of_domain"
+    assert body["context"]["nextAction"] == "OUT_OF_DOMAIN"
 
 
 def test_confirmation_without_pending_action_needs_clarification():

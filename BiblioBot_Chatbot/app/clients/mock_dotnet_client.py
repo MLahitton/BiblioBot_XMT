@@ -10,13 +10,11 @@ class MockDotNetClient:
             return self._copy(BOOKS)
 
         normalized_query = self._normalize(query)
+        query_words = [word for word in normalized_query.split() if len(word) > 1]
         matches = [
             book
             for book in BOOKS
-            if normalized_query in self._normalize(book["title"])
-            or normalized_query in self._normalize(book["author"])
-            or normalized_query in self._normalize(book["genre"])
-            or normalized_query in self._normalize(book["description"])
+            if self._matches_book_query(book, normalized_query, query_words)
         ]
         return self._copy(matches)
 
@@ -162,6 +160,20 @@ class MockDotNetClient:
             if unicodedata.category(char) != "Mn"
         )
         return " ".join(without_accents.split())
+
+    def _matches_book_query(self, book: dict, normalized_query: str, query_words: list[str]) -> bool:
+        searchable_text = self._normalize(
+            " ".join(
+                str(value or "")
+                for value in (
+                    book["title"],
+                    book["author"],
+                    book["genre"],
+                    book["description"],
+                )
+            )
+        )
+        return normalized_query in searchable_text or all(word in searchable_text for word in query_words)
 
     def _copy(self, value):
         return copy.deepcopy(value)

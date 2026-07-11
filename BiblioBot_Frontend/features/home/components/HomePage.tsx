@@ -10,6 +10,18 @@ import { BiblioBotChatWidget } from "./BiblioBotChatWidget";
 import { ChatProvider } from "./ChatContext";
 import { ParallaxBookExperience } from "./ParallaxBookExperience";
 import { PageShell } from "./PageShell";
+import type { ChatbotPageContext } from "../types/chat.types";
+
+function toChatbotBookContext(book: Book) {
+  return {
+    id: book.id,
+    title: book.title,
+    authors: [book.author].filter(Boolean),
+    categories: [book.category].filter(Boolean),
+    price: book.price,
+    available: book.stock > 0,
+  };
+}
 
 export async function HomePage() {
   let dataError: string | null = null;
@@ -25,6 +37,12 @@ export async function HomePage() {
     dataError = error instanceof Error ? error.message : "No se pudo conectar con la API.";
   }
 
+  const chatPageContext: ChatbotPageContext = {
+    route: "/",
+    pageTitle: "Inicio",
+    visibleBooks: featuredBooks.slice(0, 10).map(toChatbotBookContext),
+  };
+
   return (
     <ChatProvider>
       <PageShell>
@@ -36,7 +54,7 @@ export async function HomePage() {
             dataError={dataError}
           />
         </div>
-        <BiblioBotChatWidget />
+        <BiblioBotChatWidget pageContext={chatPageContext} />
       </PageShell>
     </ChatProvider>
   );

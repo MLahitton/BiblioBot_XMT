@@ -10,12 +10,24 @@ import type { Book } from "@/features/books/types/book.types";
 import { BiblioBotChatWidget } from "@/features/home/components/BiblioBotChatWidget";
 import { ChatProvider } from "@/features/home/components/ChatContext";
 import { PageShell } from "@/features/home/components/PageShell";
+import type { ChatbotPageContext } from "@/features/home/types/chat.types";
 
 type BookPageProps = {
   params: Promise<{ slug: string }>;
 };
 
 export const dynamic = "force-dynamic";
+
+function toChatbotBookContext(book: Book) {
+  return {
+    id: book.id,
+    title: book.title,
+    authors: [book.author].filter(Boolean),
+    categories: [book.category].filter(Boolean),
+    price: book.price,
+    available: book.stock > 0,
+  };
+}
 
 export async function generateStaticParams() {
   return [];
@@ -66,13 +78,20 @@ export default async function BookPage({ params }: BookPageProps) {
         candidate.id !== book.id && candidate.category === book.category,
     )
     .slice(0, 3);
+  const chatPageContext: ChatbotPageContext = {
+    route: `/books/${book.slug}`,
+    pageTitle: book.title,
+    activeCategory: book.category,
+    selectedBook: toChatbotBookContext(book),
+    visibleBooks: relatedBooks.map(toChatbotBookContext),
+  };
 
   return (
     <ChatProvider>
       <PageShell>
         <Header />
         <BookDetailPage book={book} relatedBooks={relatedBooks} />
-        <BiblioBotChatWidget />
+        <BiblioBotChatWidget pageContext={chatPageContext} />
       </PageShell>
     </ChatProvider>
   );

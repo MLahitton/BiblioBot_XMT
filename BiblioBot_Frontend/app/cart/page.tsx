@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/layout/Header";
 import { CartPage } from "@/features/cart/components/CartPage";
-import { BiblioBotChatWidget } from "@/features/home/components/BiblioBotChatWidget";
 import { ChatProvider } from "@/features/home/components/ChatContext";
 import { PageShell } from "@/features/home/components/PageShell";
 
@@ -16,7 +15,6 @@ export default function CartRoutePage() {
       <PageShell>
         <Header />
         <CartPage />
-        <BiblioBotChatWidget />
       </PageShell>
     </ChatProvider>
   );

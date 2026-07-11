@@ -1,11 +1,47 @@
-﻿export type ChatbotUiAction =
+export type ChatbotUiAction =
   | "NAVIGATE_TO_CATALOG"
   | "NAVIGATE_TO_PRODUCT"
   | "SHOW_INVOICE"
   | "OPEN_CART"
   | "APPLY_FILTERS"
+  | "NAVIGATE_TO_ADMIN_USERS"
+  | "NAVIGATE_TO_ADMIN_CREATE_USER"
+  | "NAVIGATE_TO_ADMIN_BOOKS"
+  | "NAVIGATE_TO_ADMIN_CREATE_BOOK"
+  | "NAVIGATE_TO_ADMIN_INVENTORY"
+  | "NAVIGATE_TO_INVENTORY_ADJUSTMENT"
+  | "NAVIGATE_TO_ADMIN_SALES"
+  | "NAVIGATE_TO_ADMIN_INVOICES"
+  | "NAVIGATE_TO_ADMIN_REPORTS"
+  | "NAVIGATE_TO_ADMIN_REQUESTS"
   | "NONE"
   | string;
+
+export type ChatbotContextBook = {
+  id?: string | null;
+  title?: string | null;
+  authors?: string[];
+  categories?: string[];
+  price?: number | null;
+  available?: boolean | null;
+};
+
+export type ChatbotCartSummary = {
+  itemCount?: number | null;
+  totalItems?: number | null;
+  subtotal?: number | null;
+};
+
+export type ChatbotPageContext = {
+  route?: string | null;
+  pageTitle?: string | null;
+  searchQuery?: string | null;
+  activeCategory?: string | null;
+  activeFilters?: Record<string, string>;
+  visibleBooks?: ChatbotContextBook[];
+  selectedBook?: ChatbotContextBook | null;
+  cartSummary?: ChatbotCartSummary | null;
+};
 
 export type ChatbotLink = {
   label: string;
@@ -68,6 +104,12 @@ export type ChatbotResponse = {
   links: ChatbotLink[];
   uiAction: ChatbotUiAction;
   context: ChatbotContext;
+};
+
+export type SendChatMessageRequest = {
+  sessionId: string;
+  message: string;
+  pageContext?: ChatbotPageContext;
 };
 
 export type SendChatMessageResult = {

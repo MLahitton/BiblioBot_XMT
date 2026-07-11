@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { defaultPriceLocale, priceFormatOptions } from "@/constants/currency";
 import { routes } from "@/constants/routes";
+import { BiblioBotChatWidget } from "@/features/home/components/BiblioBotChatWidget";
+import type { ChatbotPageContext } from "@/features/home/types/chat.types";
 import {
   CartAuthError,
   addOrUpdateCartItem,
@@ -176,6 +178,26 @@ export function CartPage() {
       total: subtotal + tax,
     };
   }, [cart.subtotal]);
+  const chatPageContext = useMemo<ChatbotPageContext>(
+    () => ({
+      route: "/cart",
+      pageTitle: "Carrito",
+      visibleBooks: cart.items.slice(0, 10).map((item) => ({
+        id: item.bookId,
+        title: item.bookTitle,
+        authors: [],
+        categories: [],
+        price: item.unitPrice,
+        available: true,
+      })),
+      cartSummary: {
+        itemCount: cart.items.length,
+        totalItems: cart.totalItems,
+        subtotal: totals.subtotal,
+      },
+    }),
+    [cart.items, cart.totalItems, totals.subtotal],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -308,74 +330,78 @@ export function CartPage() {
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-background px-5 pb-16 pt-36 text-foreground sm:px-8 md:pt-24 lg:px-12">
-        <section className="mx-auto max-w-6xl border-y border-border/70 bg-paper/55 py-14">
-          <p className="text-center text-sm font-black uppercase tracking-widest text-muted">
-            Cargando carrito
-          </p>
-        </section>
-      </main>
+      <>
+        <main className="min-h-screen bg-background px-5 pb-16 pt-36 text-foreground sm:px-8 md:pt-24 lg:px-12">
+          <section className="mx-auto max-w-6xl border-y border-border/70 bg-paper/55 py-14">
+            <p className="text-center text-sm font-black uppercase tracking-widest text-muted">
+              Cargando carrito
+            </p>
+          </section>
+        </main>
+        <BiblioBotChatWidget pageContext={chatPageContext} />
+      </>
     );
   }
 
   return (
-    <main className="min-h-screen bg-background px-5 pb-16 pt-36 text-foreground sm:px-8 md:pt-24 lg:px-12">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[0.68rem] font-black uppercase tracking-widest text-accent">
-              Tu seleccion
-            </p>
-            <h1 className="mt-2 text-4xl font-black leading-tight text-foreground sm:text-5xl">
-              Carrito
-            </h1>
-          </div>
-          <Link
-            href={routes.home}
-            className="inline-flex h-10 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-paper px-5 text-[0.68rem] font-black uppercase tracking-widest text-foreground shadow-[0_6px_14px_rgba(53,30,28,0.06)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            Seguir explorando
-          </Link>
-        </div>
-
-        {error && (
-          <div className="mb-5 rounded-[18px] border border-accent/25 bg-accent/5 px-5 py-4 text-sm font-bold text-foreground">
-            {error}
-            {error.includes("iniciar sesion") && (
-              <Link href="/auth/login" className="ml-2 text-accent underline underline-offset-4">
-                Iniciar sesion
-              </Link>
-            )}
-          </div>
-        )}
-
-        {successSale && (
-          <div className="mb-5 rounded-[18px] border border-[#b8d8c0] bg-[#eef8f0] px-5 py-4 text-sm font-bold text-[#315f3a]">
-            Pago simulado aprobado por {approvedPaymentMethod ? paymentMethodLabels[approvedPaymentMethod] : "el metodo seleccionado"}.
-            Pedido creado correctamente. Codigo: {successSale.id.slice(0, 8).toUpperCase()}
-          </div>
-        )}
-
-        {isEmpty ? (
-          <section className="border-y border-border/70 bg-paper/55 px-5 py-16 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] shadow-[0_10px_24px_rgba(53,30,28,0.08)]">
-              <Image src="/icons/cart.svg" alt="" width={24} height={24} />
+    <>
+      <main className="min-h-screen bg-background px-5 pb-16 pt-36 text-foreground sm:px-8 md:pt-24 lg:px-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[0.68rem] font-black uppercase tracking-widest text-accent">
+                Tu seleccion
+              </p>
+              <h1 className="mt-2 text-4xl font-black leading-tight text-foreground sm:text-5xl">
+                Carrito
+              </h1>
             </div>
-            <h2 className="mt-6 text-2xl font-black text-foreground">
-              Tu carrito esta vacio
-            </h2>
-            <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-muted">
-              Agrega libros desde el catalogo y vuelve aqui para revisar cantidades antes de confirmar.
-            </p>
             <Link
-              href="/#destacados"
-              className="mt-7 inline-flex h-12 items-center justify-center rounded-full bg-foreground px-7 text-sm font-black text-paper shadow-[0_10px_24px_rgba(53,30,28,0.18)] transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              href={routes.home}
+              className="inline-flex h-10 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-paper px-5 text-[0.68rem] font-black uppercase tracking-widest text-foreground shadow-[0_6px_14px_rgba(53,30,28,0.06)] transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
-              Ver libros
+              Seguir explorando
             </Link>
-          </section>
-        ) : (
-          <section className="grid gap-8 lg:grid-cols-[1fr_340px]">
+          </div>
+
+          {error && (
+            <div className="mb-5 rounded-[18px] border border-accent/25 bg-accent/5 px-5 py-4 text-sm font-bold text-foreground">
+              {error}
+              {error.includes("iniciar sesion") && (
+                <Link href="/auth/login" className="ml-2 text-accent underline underline-offset-4">
+                  Iniciar sesion
+                </Link>
+              )}
+            </div>
+          )}
+
+          {successSale && (
+            <div className="mb-5 rounded-[18px] border border-[#b8d8c0] bg-[#eef8f0] px-5 py-4 text-sm font-bold text-[#315f3a]">
+              Pago simulado aprobado por {approvedPaymentMethod ? paymentMethodLabels[approvedPaymentMethod] : "el metodo seleccionado"}.
+              Pedido creado correctamente. Codigo: {successSale.id.slice(0, 8).toUpperCase()}
+            </div>
+          )}
+
+          {isEmpty ? (
+            <section className="border-y border-border/70 bg-paper/55 px-5 py-16 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[rgba(53,30,28,0.24)] bg-[#f8efe9] shadow-[0_10px_24px_rgba(53,30,28,0.08)]">
+                <Image src="/icons/cart.svg" alt="" width={24} height={24} />
+              </div>
+              <h2 className="mt-6 text-2xl font-black text-foreground">
+                Tu carrito esta vacio
+              </h2>
+              <p className="mx-auto mt-3 max-w-md text-sm font-semibold leading-6 text-muted">
+                Agrega libros desde el catalogo y vuelve aqui para revisar cantidades antes de confirmar.
+              </p>
+              <Link
+                href="/#destacados"
+                className="mt-7 inline-flex h-12 items-center justify-center rounded-full bg-foreground px-7 text-sm font-black text-paper shadow-[0_10px_24px_rgba(53,30,28,0.18)] transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Ver libros
+              </Link>
+            </section>
+          ) : (
+            <section className="grid gap-8 lg:grid-cols-[1fr_340px]">
             <div className="space-y-3">
               {cart.items.map((item) => (
                 <article
@@ -676,9 +702,11 @@ export function CartPage() {
                 Vaciar carrito
               </button>
             </aside>
-          </section>
-        )}
-      </div>
-    </main>
+            </section>
+          )}
+        </div>
+      </main>
+      <BiblioBotChatWidget pageContext={chatPageContext} />
+    </>
   );
 }

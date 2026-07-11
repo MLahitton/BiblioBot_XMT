@@ -18,6 +18,8 @@ class AuthRequiredService:
         "create_sale",
         "confirm_sale",
         "inventory_query",
+        "admin_inventory_adjustment",
+        "admin_navigation",
     }
     GUEST_PUBLIC_PERMISSIONS = {"chat.message", "books.read", "books.search"}
 

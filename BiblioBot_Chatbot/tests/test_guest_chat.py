@@ -74,6 +74,12 @@ def assert_auth_required(body, original_intent: str):
     assert body["context"]["metadata"].get("pendingAction") is None
 
 
+def assert_not_auth_required(body):
+    assert body["context"]["intent"] != "auth_required"
+    assert body["context"]["nextAction"] != "AUTH_REQUIRED"
+    assert body["context"]["metadata"].get("authRequired") is not True
+
+
 def test_chat_process_request_accepts_user_id_null():
     request = ChatProcessRequest(**payload("recomiendame libros de fantasia"))
 
@@ -113,6 +119,26 @@ def test_guest_can_search_catalog_and_get_navigation_metadata():
     assert body["context"]["metadata"]["filters"]["genre"] == "fantasia"
 
 
+def test_guest_recommend_book_allowed():
+    body = post_chat("recomiendame un libro")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "catalog_search"
+    assert body["uiAction"] == "NAVIGATE_TO_CATALOG"
+    assert body["context"]["metadata"]["resultCount"] > 0
+
+
+def test_guest_recommend_fantasy_allowed():
+    body = post_chat("recomiendame un libro de fantacia")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "catalog_search"
+    assert body["context"]["metadata"]["filters"]["genre"] == "fantasia"
+    assert body["context"]["metadata"]["resultCount"] > 0
+
+
 def test_guest_can_view_book_detail_and_product_link():
     body = post_chat("ver libro Python Practico")
 
@@ -135,12 +161,196 @@ def test_phase11_guest_purchase_matilda_returns_auth_required():
     assert_auth_required(body, "purchase_intent")
 
 
+def test_guest_purchase_matilda_auth_required():
+    body = post_chat("comprar matilda")
+
+    assert_auth_required(body, "purchase_intent")
+
+
+def test_purchase_regression_guest_hobbit_auth_required():
+    body = post_chat("quiero comprar El Hobbit")
+
+    assert_auth_required(body, "purchase_intent")
+
+
+def test_authenticated_purchase_matilda_waiting_confirmation():
+    body = post_chat(
+        "quiero comprar matilda",
+        userId="0d4f3d2a-8f6a-4d50-86df-f1f80993b8e9",
+        userEmail="cliente@example.com",
+        roles=["CLIENT"],
+        permissions=["chat.message", "books.read", "cart.manage", "sales.create"],
+    )
+
+    assert body["state"] == "WAITING_CONFIRMATION"
+    assert body["context"]["intent"] == "purchase_intent"
+    assert body["context"]["requiresConfirmation"] is True
+    assert body["context"]["metadata"]["bookTitle"] == "Matilda"
+    assert body["context"]["metadata"]["quantity"] == 1
+
+
+def test_purchase_regression_authenticated_hobbit_waiting_confirmation():
+    body = post_chat(
+        "quiero comprar El Hobbit",
+        userId="0d4f3d2a-8f6a-4d50-86df-f1f80993b8e9",
+        userEmail="cliente@example.com",
+        roles=["CLIENT"],
+        permissions=["chat.message", "books.read", "cart.manage", "sales.create"],
+    )
+
+    assert body["state"] == "WAITING_CONFIRMATION"
+    assert body["context"]["intent"] == "purchase_intent"
+    assert body["context"]["requiresConfirmation"] is True
+    assert body["context"]["metadata"]["bookTitle"] == "El Hobbit"
+    assert body["context"]["metadata"]["quantity"] == 1
+
+
 def test_phase11_guest_stock_question_is_allowed():
     body = post_chat("tienes matilda?")
 
+    assert_not_auth_required(body)
     assert body["state"] == "INTENT_DETECTED"
     assert body["context"]["intent"] == "stock_check"
     assert body["context"]["metadata"]["stock"]["title"] == "Matilda"
+
+
+def test_guest_summary_with_explicit_book_allowed():
+    body = post_chat("dame un resumen de Matilda")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["uiAction"] == "NAVIGATE_TO_PRODUCT"
+    assert body["context"]["metadata"]["book"]["title"] == "Matilda"
+    assert body["context"]["metadata"]["summaryRequested"] is True
+
+
+def test_guest_what_is_book_about_allowed():
+    body = post_chat("de que trata Matilda")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["metadata"]["book"]["title"] == "Matilda"
+
+
+def test_guest_summary_does_not_trigger_purchase():
+    body = post_chat("dame un resumen de que trata Matilda")
+
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["intent"] != "purchase_intent"
+    assert body["context"]["metadata"]["book"]["title"] == "Matilda"
+
+
+def test_guest_price_question_allowed():
+    body = post_chat("cuanto cuesta Matilda")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["metadata"]["book"]["title"] == "Matilda"
+
+
+def test_guest_summary_without_book_asks_clarification():
+    body = post_chat("dame un resumen de que trata", sessionId="guest-summary-no-book-session")
+
+    assert body["state"] == "ASKING_DETAILS"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["metadata"]["pendingClarification"]["expectedEntity"] == "book"
+    assert "libro" in body["response"].lower()
+
+
+def test_clarification_de_matilda_resolves_book():
+    session_id = "guest-summary-pending-matilda-session"
+    first = post_chat("dame un resumen del libro", sessionId=session_id)
+    second = post_chat("de matilda", sessionId=session_id)
+
+    assert first["state"] == "ASKING_DETAILS"
+    assert first["context"]["metadata"]["pendingClarification"]["intent"] == "book_detail"
+    assert second["state"] == "INTENT_DETECTED"
+    assert second["context"]["intent"] == "book_detail"
+    assert second["context"]["metadata"]["book"]["title"] == "Matilda"
+
+
+def test_guest_summary_uses_last_selected_book():
+    session_id = "guest-summary-last-book-session"
+    first = post_chat("hablame sobre Matilda", sessionId=session_id)
+    second = post_chat("dame un resumen de que trata", sessionId=session_id)
+
+    assert first["state"] == "INTENT_DETECTED"
+    assert first["context"]["metadata"]["book"]["title"] == "Matilda"
+    assert second["state"] == "INTENT_DETECTED"
+    assert second["context"]["intent"] == "book_detail"
+    assert second["context"]["metadata"]["book"]["title"] == "Matilda"
+    assert second["context"]["metadata"]["summaryRequested"] is True
+
+
+def test_esta_matilda_not_general_help():
+    body = post_chat("esta matilda?")
+
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] in {"stock_check", "book_detail"}
+    assert body["context"]["intent"] != "general_help"
+
+
+def test_hablo_del_libro_matilda_not_catalog_empty():
+    body = post_chat("hablo del libro matilda")
+
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "book_detail"
+    assert body["context"]["metadata"]["book"]["title"] == "Matilda"
+
+
+def test_typo_fantacia_finds_fantasia():
+    body = post_chat("excelente quiero que me recomiendes un libro de fantacia")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "catalog_search"
+    assert body["context"]["metadata"]["resultCount"] > 0
+
+
+def test_list_categories_returns_categories_not_general_help():
+    body = post_chat("dime las categorias")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "list_categories"
+    assert body["uiAction"] == "NAVIGATE_TO_CATALOG"
+    assert body["context"]["metadata"]["resultCount"] > 0
+    assert body["context"]["intent"] != "general_help"
+
+
+def test_guest_list_categories_allowed():
+    body = post_chat("dime cuales categorias hay")
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "list_categories"
+    assert body["context"]["intent"] != "stock_check"
+    assert body["context"]["metadata"]["resultCount"] > 0
+
+
+def test_software_not_auth_required():
+    body = post_chat("algun libro de software que me recomiendes", sessionId="guest-software-not-auth-required")
+    titles = {book["title"] for book in body["context"]["metadata"]["books"]}
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "catalog_search"
+    assert body["context"]["metadata"]["resultCount"] >= 1
+    assert titles & {"Python Practico", "Arquitectura Limpia para APIs", "Clean Code"}
+
+
+def test_guest_search_matilda_allowed():
+    body = post_chat("busca matilda")
+    titles = [book["title"] for book in body["context"]["metadata"]["books"]]
+
+    assert_not_auth_required(body)
+    assert body["state"] == "INTENT_DETECTED"
+    assert body["context"]["intent"] == "catalog_search"
+    assert "Matilda" in titles
 
 
 def test_guest_checkout_cart_returns_auth_required():

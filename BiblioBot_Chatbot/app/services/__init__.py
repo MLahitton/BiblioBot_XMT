@@ -4,6 +4,7 @@ from app.services.chat_orchestrator import ChatOrchestratorService
 from app.services.frontend_action_service import FrontendActionService
 from app.services.llm_assistant_service import LlmAssistantService
 from app.services.permission_service import PermissionService
+from app.services.response_composer_service import ResponseComposerService
 
 __all__ = [
     "ChatOrchestratorService",
@@ -12,4 +13,5 @@ __all__ = [
     "FrontendActionService",
     "LlmAssistantService",
     "PermissionService",
+    "ResponseComposerService",
 ]

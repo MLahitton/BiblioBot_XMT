@@ -174,6 +174,7 @@ public sealed class SendChatMessageCommandHandler : IRequestHandler<SendChatMess
             Permissions = permissions,
             Source = "DOTNET_BACKEND",
             SentAt = now,
+            PageContext = request.PageContext,
         };
 
         ChatbotResponseDto responseFromFastApi;

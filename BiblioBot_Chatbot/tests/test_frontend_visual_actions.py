@@ -104,12 +104,41 @@ def test_general_help_returns_initial_suggestions_inside_metadata_only():
     suggestions = body["context"]["metadata"]["suggestions"]
 
     assert body["state"] == "IDLE"
+    assert body["context"]["intent"] == "greeting"
     assert "suggestions" not in body
     assert isinstance(suggestions, list)
     assert suggestions
     assert "Comprar ahora" not in suggestions
     assert all(isinstance(suggestion, str) and suggestion.strip() for suggestion in suggestions)
     assert all("comprar" not in suggestion.lower() for suggestion in suggestions)
+
+
+def test_admin_create_user_uses_real_frontend_route():
+    body = post_chat(
+        "quiero agregar un usuario",
+        roles=["ADMIN"],
+        permissions=["chat.message", "admin.users.read"],
+    )
+    metadata = body["context"]["metadata"]
+
+    assert body["uiAction"] == "NAVIGATE_TO_ADMIN_CREATE_USER"
+    assert metadata["frontendRoute"] == "/admin/usuarios"
+    assert body["links"][0]["url"] == "/admin/usuarios"
+    assert not body["links"][0]["url"].startswith("/api/")
+
+
+def test_inventory_adjustment_uses_real_frontend_route_without_mutation_claim():
+    body = post_chat(
+        "quiero que saques uno del stock y que queden 9 libros de anna karenina",
+        roles=["ADMIN"],
+        permissions=["chat.message", "inventory.entry", "books.read", "books.search"],
+    )
+    metadata = body["context"]["metadata"]
+
+    assert body["uiAction"] == "NAVIGATE_TO_INVENTORY_ADJUSTMENT"
+    assert metadata["frontendRoute"] == "/admin/inventario"
+    assert metadata["safeMutationAvailable"] is False
+    assert body["links"][0]["url"] == "/admin/inventario"
 
 
 def test_frontend_action_service_blocks_unsafe_paths_and_backend_routes():

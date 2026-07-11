@@ -10,6 +10,9 @@ class FrontendActionService:
     CART_ROUTE = "/cart"
     LOGIN_ROUTE = "/auth/login"
     REGISTER_ROUTE = "/auth/register"
+    DASHBOARD_ROUTE = "/dashboard"
+    ADMIN_USERS_ROUTE = "/admin/usuarios"
+    ADMIN_INVENTORY_ROUTE = "/admin/inventario"
 
     INITIAL_SUGGESTIONS = [
         "Recomiendame ficcion",
@@ -46,9 +49,10 @@ class FrontendActionService:
         if query:
             params["q"] = query
         if filters:
-            for key in ("genre", "category"):
-                if filters.get(key):
-                    params[key] = filters[key]
+            if filters.get("category"):
+                params["category"] = filters["category"]
+            elif filters.get("genre"):
+                params["category"] = self._slugify(str(filters["genre"]))
         suffix = f"?{urlencode(params)}" if params else ""
         return self._build_link("Ver catalogo", f"{self.SEARCH_ROUTE}{suffix}", "CATALOG_SEARCH")
 
@@ -73,6 +77,18 @@ class FrontendActionService:
 
     def build_cart_link(self) -> ChatLink:
         return self._build_link("Ver carrito", self.CART_ROUTE, "CART")
+
+    def build_admin_link(self, label: str, route: str, link_type: str) -> ChatLink:
+        return self._build_link(label, route, link_type)
+
+    def build_admin_metadata(self, route: str, target: str, extra: dict | None = None) -> dict:
+        metadata = {
+            "frontendRoute": route,
+            "adminTarget": target,
+        }
+        if extra:
+            metadata.update(extra)
+        return metadata
 
     def get_initial_suggestions(self) -> list[str]:
         return list(self.INITIAL_SUGGESTIONS)

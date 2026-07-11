@@ -147,7 +147,7 @@ def test_chat_graph_process_works_without_gemini_api_key():
     response = service.process(request("hola"))
 
     assert response.state == "IDLE"
-    assert response.context.intent == "general_help"
+    assert response.context.intent == "greeting"
 
 
 def test_graph_internal_error_returns_failed_controlled():
@@ -235,6 +235,245 @@ def test_catalog_search_with_show_me_books_phrase_stays_catalog():
     assert response.context.intent == "catalog_search"
     assert response.uiAction == "NAVIGATE_TO_CATALOG"
     assert response.context.metadata["filters"]["genre"] == "terror"
+
+
+def test_catalog_single_result_sets_last_book():
+    session_id = "session-catalog-single-last-book"
+    first = process(
+        "busca Alicia en el pais de las maravillas",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    refined = process(
+        "de fantacia",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    summary = process(
+        "de que trata ese libro",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first.context.intent == "catalog_search"
+    assert refined.context.intent == "refine_catalog_filter"
+    assert refined.context.metadata["resultCount"] == 1
+    assert refined.context.metadata["books"][0]["title"] == "Alicia en el pais de las maravillas"
+    assert summary.context.intent == "book_detail"
+    assert summary.uiAction == "NAVIGATE_TO_PRODUCT"
+    assert summary.context.metadata["book"]["title"] == "Alicia en el pais de las maravillas"
+
+
+def test_that_book_uses_last_book():
+    session_id = "session-that-book-last-book"
+    first = process(
+        "hablame de Matilda",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    second = process(
+        "de que trata ese libro",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first.context.intent == "book_detail"
+    assert first.context.metadata["book"]["title"] == "Matilda"
+    assert second.context.intent == "book_detail"
+    assert second.context.metadata["book"]["title"] == "Matilda"
+    assert second.state != "ASKING_DETAILS"
+
+
+def test_list_categories_variants():
+    cases = [
+        "listame las categorias por favor",
+        "dime las categorias",
+        "que categorias hay",
+        "categorias disponibles",
+    ]
+
+    for index, message in enumerate(cases):
+        response = process(
+            message,
+            sessionId=f"session-list-categories-{index}",
+            permissions=["chat.message", "books.read", "books.search"],
+        )
+
+        assert response.state == "INTENT_DETECTED"
+        assert response.context.intent == "list_categories"
+        assert response.context.intent != "stock_check"
+        assert response.context.metadata["resultCount"] > 0
+
+
+def test_software_recommendation_maps_to_technical_books():
+    response = process(
+        "algun libro de software que me recomiendes",
+        sessionId="session-software-recommendation",
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    titles = {book["title"] for book in response.context.metadata["books"]}
+
+    assert response.state == "INTENT_DETECTED"
+    assert response.context.intent == "catalog_search"
+    assert response.uiAction == "NAVIGATE_TO_CATALOG"
+    assert response.context.metadata["resultCount"] >= 1
+    assert titles & {"Python Practico", "Arquitectura Limpia para APIs", "Clean Code"}
+
+
+def test_programming_synonyms():
+    cases = [
+        "libros de programacion",
+        "libros de ingenieria de software",
+        "libros tecnicos",
+    ]
+
+    for index, message in enumerate(cases):
+        response = process(
+            message,
+            sessionId=f"session-programming-synonyms-{index}",
+            permissions=["chat.message", "books.read", "books.search"],
+        )
+        titles = {book["title"] for book in response.context.metadata["books"]}
+
+        assert response.context.intent == "catalog_search"
+        assert response.context.metadata["resultCount"] >= 1
+        assert titles & {"Python Practico", "Arquitectura Limpia para APIs", "Clean Code"}
+
+
+def test_categories_not_stock():
+    response = process(
+        "dime las categorias",
+        sessionId="session-categories-not-stock",
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert response.context.intent == "list_categories"
+    assert response.context.intent != "stock_check"
+    assert "sede" not in response.response.lower()
+
+
+def test_followup_other_book_uses_last_catalog_results():
+    session_id = "session-followup-other-book"
+    first = process(
+        "recomiendame libros de fantasia",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    other = process(
+        "algun otro libro?",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    first_titles = [book["title"] for book in first.context.metadata["books"][:3]]
+
+    assert first.context.intent == "catalog_search"
+    assert other.context.intent == "catalog_search"
+    assert other.state == "INTENT_DETECTED"
+    assert "no encontre" not in other.response.lower()
+    assert other.context.metadata["book"]["title"] not in first_titles
+    assert other.context.metadata["book"]["genre"] == "fantasia"
+
+
+def test_followup_next_book_advances_recommendation_index():
+    session_id = "session-followup-next-book"
+    process(
+        "recomiendame libros de fantasia",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    first_other = process(
+        "otro libro",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    second_other = process(
+        "otro libro",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first_other.context.metadata["book"]["title"] != second_other.context.metadata["book"]["title"]
+    assert second_other.context.metadata["lastRecommendationIndex"] > first_other.context.metadata["lastRecommendationIndex"]
+
+
+def test_explicit_title_overrides_last_book():
+    session_id = "session-explicit-title-overrides-last-book"
+    first = process(
+        "de que trata alicia en el pais de las maravillas",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    second = process(
+        "y de que trata el hobbit",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first.context.metadata["book"]["title"] == "Alicia en el pais de las maravillas"
+    assert second.context.intent == "book_detail"
+    assert second.context.metadata["book"]["title"] == "El Hobbit"
+
+
+def test_short_explicit_title_overrides_last_book():
+    session_id = "session-short-explicit-title-overrides-last-book"
+    first = process(
+        "hablame de Matilda",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    second = process(
+        "y el hobbit?",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first.context.metadata["book"]["title"] == "Matilda"
+    assert second.context.intent == "book_detail"
+    assert second.context.metadata["book"]["title"] == "El Hobbit"
+
+
+def test_indirect_reference_uses_last_book():
+    session_id = "session-indirect-reference-uses-last-book"
+    first = process(
+        "hablame de Matilda",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    second = process(
+        "de que trata ese libro?",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first.context.metadata["book"]["title"] == "Matilda"
+    assert second.context.intent == "book_detail"
+    assert second.context.metadata["book"]["title"] == "Matilda"
+
+
+def test_first_second_from_last_catalog_results():
+    session_id = "session-first-second-last-catalog"
+    catalog = process(
+        "recomiendame libros de fantasia",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    first = process(
+        "el primero",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+    second = process(
+        "el segundo",
+        sessionId=session_id,
+        permissions=["chat.message", "books.read", "books.search"],
+    )
+
+    assert first.context.intent == "book_detail"
+    assert second.context.intent == "book_detail"
+    assert first.context.metadata["book"]["title"] == catalog.context.metadata["books"][0]["title"]
+    assert second.context.metadata["book"]["title"] == catalog.context.metadata["books"][1]["title"]
+    assert first.context.metadata["book"]["title"] != second.context.metadata["book"]["title"]
 
 
 def test_book_detail_found_returns_product_navigation_and_link():
@@ -821,7 +1060,8 @@ def test_unknown_without_gemini_needs_clarification():
     response = service.process(request("me gusta el color azul"))
 
     assert response.state == "NEEDS_CLARIFICATION"
-    assert response.context.intent == "unknown"
+    assert response.context.intent == "out_of_domain"
+    assert response.context.nextAction == "OUT_OF_DOMAIN"
 
 
 def test_gemini_can_suggest_allowed_intent_but_not_skip_permissions_or_confirmations():
@@ -845,7 +1085,7 @@ def test_gemini_safe_text_does_not_change_critical_context():
         request("quiero comprar 2 Python Practico", permissions=["chat.message", "cart.manage"])
     )
 
-    assert response.response == "Texto conversacional seguro."
+    assert "confirmes" in response.response.lower()
     assert response.state == "WAITING_CONFIRMATION"
     assert response.uiAction == "NONE"
     assert response.context.requiresConfirmation is True

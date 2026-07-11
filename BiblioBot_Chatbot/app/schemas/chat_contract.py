@@ -6,6 +6,32 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class ChatContextBook(BaseModel):
+    id: str | None = None
+    title: str | None = None
+    authors: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+    price: float | int | None = None
+    available: bool | None = None
+
+
+class ChatContextCartSummary(BaseModel):
+    itemCount: int | None = None
+    totalItems: int | None = None
+    subtotal: float | int | None = None
+
+
+class ChatPageContext(BaseModel):
+    route: str | None = None
+    pageTitle: str | None = None
+    searchQuery: str | None = None
+    activeCategory: str | None = None
+    activeFilters: dict[str, str] = Field(default_factory=dict)
+    visibleBooks: list[ChatContextBook] = Field(default_factory=list)
+    selectedBook: ChatContextBook | None = None
+    cartSummary: ChatContextCartSummary | None = None
+
+
 class ChatState(StrEnum):
     IDLE = "IDLE"
     INTENT_DETECTED = "INTENT_DETECTED"
@@ -23,6 +49,16 @@ class UiActionType(StrEnum):
     OPEN_CART = "OPEN_CART"
     SHOW_INVOICE = "SHOW_INVOICE"
     APPLY_FILTERS = "APPLY_FILTERS"
+    NAVIGATE_TO_ADMIN_USERS = "NAVIGATE_TO_ADMIN_USERS"
+    NAVIGATE_TO_ADMIN_CREATE_USER = "NAVIGATE_TO_ADMIN_CREATE_USER"
+    NAVIGATE_TO_ADMIN_BOOKS = "NAVIGATE_TO_ADMIN_BOOKS"
+    NAVIGATE_TO_ADMIN_CREATE_BOOK = "NAVIGATE_TO_ADMIN_CREATE_BOOK"
+    NAVIGATE_TO_ADMIN_INVENTORY = "NAVIGATE_TO_ADMIN_INVENTORY"
+    NAVIGATE_TO_INVENTORY_ADJUSTMENT = "NAVIGATE_TO_INVENTORY_ADJUSTMENT"
+    NAVIGATE_TO_ADMIN_SALES = "NAVIGATE_TO_ADMIN_SALES"
+    NAVIGATE_TO_ADMIN_INVOICES = "NAVIGATE_TO_ADMIN_INVOICES"
+    NAVIGATE_TO_ADMIN_REPORTS = "NAVIGATE_TO_ADMIN_REPORTS"
+    NAVIGATE_TO_ADMIN_REQUESTS = "NAVIGATE_TO_ADMIN_REQUESTS"
     NONE = "NONE"
 
 
@@ -35,6 +71,7 @@ class ChatProcessRequest(BaseModel):
     permissions: list[str]
     source: str = "DOTNET_BACKEND"
     sentAt: datetime | None = None
+    pageContext: ChatPageContext | None = None
 
 
 class ChatLink(BaseModel):
@@ -53,6 +90,7 @@ class ChatContext(BaseModel):
     selectedBookId: str | None = None
     saleId: str | None = None
     selectedBranchId: str | None = None
+    pageContext: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

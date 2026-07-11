@@ -91,6 +91,27 @@ class BiblioBotToolService:
             return self._backend_error(error)
         return {"status": self._client_status(), "mode": "READ_ONLY", "cart": cart}
 
+    def list_categories(self, context: ToolExecutionContext) -> dict:
+        if not self._has_any_permission(context, ["books.read", "books.search"]):
+            return self._permission_denied(["books.read", "books.search"])
+
+        books = self.mock_client.search_books()
+        categories: set[str] = set()
+        for book in books:
+            genre = str(book.get("genre") or "").strip()
+            if genre:
+                categories.add(genre)
+            for category in book.get("categories") or []:
+                category_value = str(category).strip()
+                if category_value:
+                    categories.add(category_value)
+
+        return {
+            "status": self._client_status(),
+            "mode": "READ_ONLY",
+            "categories": sorted(categories, key=str.lower),
+        }
+
     def add_or_update_cart_item(
         self,
         input_data: AddOrUpdateCartItemInput,

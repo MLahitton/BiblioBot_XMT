@@ -58,6 +58,11 @@ class QueryInventoryInput(BaseModel):
     only_low_stock: bool = False
 
 
+class RefineCatalogFilterInput(BaseModel):
+    query: str | None = None
+    genre: str | None = None
+
+
 class RegisterInventoryEntryInput(BaseModel):
     book_id: str = Field(..., min_length=1)
     branch_id: str = Field(..., min_length=1)
